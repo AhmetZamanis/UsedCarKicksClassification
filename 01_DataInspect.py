@@ -57,8 +57,7 @@ df["PurchDate"]
 df["Auction"].value_counts(normalize = True)
 
 
-# Vehicle years from 2001 to 2010. Base year is 2010. Crosscheck both columns,
-# but only use age as feature.
+# Vehicle years from 2001 to 2010. Base year is 2010. Crosscheck both columns.
 df[["VehYear", "VehicleAge"]].describe()
 
 
@@ -67,7 +66,7 @@ df[["VehYear", "VehicleAge"]].describe()
 df["Make"].value_counts()
 
 
-# There are  1063 unique models, many with only 1 observation.
+# There are 1063 unique models, many with only 1 observation.
 df["Model"].value_counts() 
 
 
@@ -154,3 +153,13 @@ df["VehBCost"].describe()
 
 # Warranty cost is for 36 months, until 36k miles
 df["WarrantyCost"].describe()
+
+
+# Convert purchase date from UNIX to datetime
+df["PurchDate"] = pd.to_datetime(df["PurchDate"], unit = "s")
+
+
+# String purchase year almost always matches PurchYear - VehYear.
+purch_year = df["PurchDate"].dt.year
+veh_year = df["VehYear"]
+((purch_year - veh_year) == df["VehicleAge"]).sum()
