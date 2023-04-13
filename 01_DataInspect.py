@@ -115,14 +115,27 @@ df["TopThreeAmericanName"].value_counts()
 
 
 # MMR stands for Manheim Market Report. MMR prices are calculated from Manheim
-# car sales, taking into account car condition. Outliers are excluded. Try to
+# car sales, taking into account car condition. Outliers are excluded. Could
 # crosscheck the missing values with cars of same model.
 pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
        'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
        'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
        'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum()
 
+# Some MMR values are zero or one, 828 of them (not including current MMRs)
+df.loc[
+  (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
+  (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
+  (df["MMRAcquisitionRetailAveragePrice"] == 0) |
+  (df["MMRAcquisitonRetailCleanPrice"] == 0)] # 828 zeroes
+  
+df.loc[
+  (df["MMRAcquisitionAuctionAveragePrice"] < 100) |
+  (df["MMRAcquisitionAuctionCleanPrice"] < 100) |
+  (df["MMRAcquisitionRetailAveragePrice"] < 100) |
+  (df["MMRAcquisitonRetailCleanPrice"] < 100)] # 828 rows smaller than 100
 
+  
 # 95% missing column. Missing values are possibly NO. YES means there was unusual
 # demand for the car.
 df["PRIMEUNIT"].value_counts(normalize = True)

@@ -83,10 +83,16 @@ df.loc[pd.isnull(df['MMRCurrentRetailAveragePrice'])] # Some Acquisition MMRs pr
 df.loc[pd.isnull(df['MMRCurrentRetailCleanPrice'])] # Some Acquisition MMRs present
 
 
-# Drop rows with NAs in MRMRAcquisition
+# Drop rows with NAs in MMRcquisition
 df = df.dropna(subset = [
   'MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
   'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice'])
+
+# Drop rows with 0s in MMRAcquisition
+df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
+  (df["MMRAcquisitionAuctionCleanPrice"] > 0) &
+  (df["MMRAcquisitionRetailAveragePrice"] > 0) &
+  (df["MMRAcquisitonRetailCleanPrice"] > 0)].copy()
   
   
 # Drop current MMR features to make the exercise more realistic
