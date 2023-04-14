@@ -8,10 +8,10 @@
 exec(open("04_Preprocessing.py").read())
 
 
+import optuna
 from sklearn.kernel_approximation import RBFSampler
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import hinge_loss, make_scorer
-import optuna
 
 
 # Recode target for hinge loss calculation
