@@ -37,3 +37,36 @@ encode_target.transform(x_train, y_train)
 test = pipe_preproc.fit_transform(x_train, y_train)
 test[0]
 x_train.iloc[0,]
+
+
+
+# Perform train-validation split
+x_train_xgb, x_val_xgb, y_train_xgb, y_val_xgb = train_test_split(
+  x_train, y_train, test_size = 0.2, random_state = 1923, stratify = y_train
+)
+
+
+
+# Test loop for XGB crossvalidation: Works.
+best_scores_test = []
+
+for split in cv_indices:
+
+  # Get train-test indices and sets
+  train_index = split[0]
+  val_index = split[1]
+
+  x_tr = x_train.iloc[train_index, ]
+  y_tr = y_train.iloc[train_index, ]
+  x_val = x_train.iloc[val_index, ]
+  y_val = y_train.iloc[val_index, ]
+
+  # Perform preprocessing
+  x_tr = pipe_process.fit_transform(x_tr, y_tr)
+  x_val = pipe_process.transform(x_val)
+
+  # Fit model and print eval set score
+  model_xgb.fit(X = x_tr, y = y_tr, eval_set = [(x_val, y_val)], verbose = True)
+  best_scores_test.append(model_xgb.best_score)
+
+del split
