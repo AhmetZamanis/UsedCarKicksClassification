@@ -58,6 +58,7 @@ def objective_logistic(trial):
 # Create study
 study_logistic = optuna.create_study(
   sampler = optuna.samplers.TPESampler(seed = 1923),
+  pruner = optuna.pruners.HyperbandPruner(),
   study_name = "tune_logistic",
   direction = "minimize"
 )
@@ -66,7 +67,7 @@ study_logistic = optuna.create_study(
 # Optimize study
 study_logistic.optimize(
   objective_logistic, 
-  n_trials = 100, 
+  n_trials = 500, 
   n_jobs = -1,
   show_progress_bar = True)
 
