@@ -52,9 +52,6 @@ def objective_xgb(trial):
     sample_weight = np.where(y_tr == 1, class_weight[1], class_weight[0])
     sample_weight_val = np.where(y_val == 1, class_weight[1], class_weight[0])
     
-    # # Retrieve positive class weight
-    # pos_weight = y_tr[y_tr == 0].count() / y_tr[y_tr == 1].count()
-    
     if i == 0: 
       
       # Create pruning callback for first CV split
@@ -64,7 +61,6 @@ def objective_xgb(trial):
       # Define XGBoost classifier
       model_xgb = XGBClassifier(
         objective = "binary:logistic",
-        # scale_pos_weight = pos_weight,
         n_estimators = 5000,
         early_stopping_rounds = 50,
         eval_metric = "logloss",
@@ -88,7 +84,6 @@ def objective_xgb(trial):
       # Define XGBoost classifier without pruning callback for remaining splits
       model_xgb = XGBClassifier(
         objective = "binary:logistic",
-        # scale_pos_weight = pos_weight,
         n_estimators = 5000,
         early_stopping_rounds = 50,
         eval_metric = "logloss",
@@ -144,3 +139,61 @@ study_xgb.optimize(
 trials_xgb = study_xgb.trials_dataframe().sort_values("value", ascending = True)
 trials_xgb.to_csv("./ModifiedData/trials_xgb.csv", index = False)
 
+
+# Import best trial
+best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
+
+
+# Retrieve best early stop rounds with optimal parameters for each CV fold
+best_iterations = []
+for i, (train_index, val_index) in enumerate(cv_indices):
+  
+    # Split training-validation data
+    x_tr = x_train.iloc[train_index, ]
+    y_tr = y_train.iloc[train_index, ]
+    x_val = x_train.iloc[val_index, ]
+    y_val = y_train.iloc[val_index, ]
+    
+    # Compute class weight
+    classes = list(set(y_tr))
+    class_weight = compute_class_weight("balanced", classes = classes, y = y_tr)
+    sample_weight = np.where(y_tr == 1, class_weight[1], class_weight[0])
+    sample_weight_val = np.where(y_val == 1, class_weight[1], class_weight[0])
+    
+    # Define XGB classifier
+    model_xgb = XGBClassifier(
+        objective = "binary:logistic",
+        n_estimators = 5000,
+        early_stopping_rounds = 50,
+        eval_metric = "logloss",
+        tree_method = "gpu_hist",
+        gpu_id = 0,
+        verbosity = 0,
+        random_state = 1923,
+        learning_rate = best_trial_xgb["params_learning_rate"],
+        max_depth = best_trial_xgb["params_max_depth"],
+        min_child_weight = best_trial_xgb["params_min_child_weight"],
+        gamma = best_trial_xgb["params_gamma"],
+        reg_alpha = best_trial_xgb["params_l1_reg"],
+        reg_lambda = best_trial_xgb["params_l2_reg"],
+        subsample = best_trial_xgb["params_subsample"],
+        colsample_bytree = best_trial_xgb["params_colsample_bytree"]
+        )
+        
+    # Perform preprocessing
+    x_tr = pipe_process.fit_transform(x_tr, y_tr)
+    x_val = pipe_process.transform(x_val)
+
+    # Fit model and save best round index
+    model_xgb.fit(
+      X = x_tr, 
+      y = y_tr, 
+      sample_weight = sample_weight,
+      eval_set = [(x_val, y_val)], 
+      sample_weight_eval_set = [sample_weight_val],
+      verbose = True)
+    best_iterations.append(model_xgb.best_iteration + 1)
+
+
+# Retrieve median of best n_estimators: 29 rounds
+int(np.median(best_iterations))
