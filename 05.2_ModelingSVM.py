@@ -133,6 +133,6 @@ study_svm.optimize(
 
 
 # Retrieve and export trials
-# Huge improvement with trial 476
 trials_svm = study_svm.trials_dataframe().sort_values("value", ascending = True)
 trials_svm.to_csv("./ModifiedData/trials_svm.csv", index = False)
+

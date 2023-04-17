@@ -1,15 +1,31 @@
+# Used cars kicks classification - Model scoring
+# Data source: 
+# https://www.openml.org/search?type=data&sort=runs&id=41162&status=active
+# https://www.kaggle.com/competitions/DontGetKicked/overview
 
+
+# Source previous script
+exec(open("04_Preprocessing.py").read())
 
 
 from sklearn.metrics import PrecisionRecallDisplay, precision_recall_fscore_support, brier_score_loss
 import matplotlib.pyplot as plt
 
 
-# Set parameters to optimal
-pipe_logistic.set_params(
-    model_logistic__C = 18.1818,
-    model_logistic__l1_ratio = 0.7
-  )
+# Create dummy classifier pipeline
+
+
+# Create logistic regression pipeline with optimal hyperparameters
+
+
+# Create SVM pipeline with optimal hyperparameters
+
+
+# Create XGBoost pipeline with optimal hyperparameters
+
+
+# Define function that fits every model pipeline & predicts test data, retrieves
+# performance metrics, plots the PRC curve 
 
 
 # Fit on training data, predict testing data, retrieve positive label probs
