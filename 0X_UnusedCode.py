@@ -70,3 +70,16 @@ for split in cv_indices:
   best_scores_test.append(model_xgb.best_score)
 
 del split
+
+
+
+# Compute class weight (for labels 0, 1)
+classes = list(set(y_train))
+class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
+sample_weight = np.where(y_train == 1, class_weight[1], class_weight[0])
+
+
+# Compute class weight (for labels -1, 1)
+classes = list(set(y_train))
+class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
+sample_weight = np.where(y_train == 1, class_weight[0], class_weight[1])

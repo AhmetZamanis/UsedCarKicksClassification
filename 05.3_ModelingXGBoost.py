@@ -11,6 +11,7 @@ exec(open("04_Preprocessing.py").read())
 import optuna
 from xgboost import XGBClassifier
 from torch.cuda import is_available
+from sklearn.utils.class_weight import compute_class_weight
 
 
 # Check if GPU is available
@@ -26,13 +27,13 @@ def objective_xgb(trial):
   
   # Suggest parameter values from parameter ranges to tune over
   learning_rate = trial.suggest_float("learning_rate", 0.05, 0.3, step = 0.05)
-  max_depth = trial.suggest_int("max_depth", 2, 12, step = 2)
+  max_depth = trial.suggest_int("max_depth", 2, 20, step = 2)
   min_child_weight = trial.suggest_int("min_child_weight", 1, 20, log = True)
-  gamma = trial.suggest_float("gamma", 0.01, 0.1, log = True)
+  gamma = trial.suggest_float("gamma", 0.01, 0.5, log = True)
   reg_alpha = trial.suggest_float("l1_reg", 0.05, 1, log = True)
   reg_lambda = trial.suggest_float("l2_reg", 0.05, 2, log = True)
-  subsample = trial.suggest_float("subsample", 0.8, 1, step = 0.1)
-  colsample_bytree = trial.suggest_float("colsample_bytree", 0.8, 1, step = 0.1)
+  subsample = trial.suggest_float("subsample", 0.5, 1, step = 0.1)
+  colsample_bytree = trial.suggest_float("colsample_bytree", 0.5, 1, step = 0.1)
   
   # Crossvalidate the parameter set
   cv_scores = []
@@ -45,8 +46,14 @@ def objective_xgb(trial):
     x_val = x_train.iloc[val_index, ]
     y_val = y_train.iloc[val_index, ]
     
-    # Retrieve positive class weight
-    pos_weight = y_tr[y_tr == 0].count() / y_tr[y_tr == 1].count()
+    # Compute class weight
+    classes = list(set(y_tr))
+    class_weight = compute_class_weight("balanced", classes = classes, y = y_tr)
+    sample_weight = np.where(y_tr == 1, class_weight[1], class_weight[0])
+    sample_weight_val = np.where(y_val == 1, class_weight[1], class_weight[0])
+    
+    # # Retrieve positive class weight
+    # pos_weight = y_tr[y_tr == 0].count() / y_tr[y_tr == 1].count()
     
     if i == 0: 
       
@@ -57,7 +64,7 @@ def objective_xgb(trial):
       # Define XGBoost classifier
       model_xgb = XGBClassifier(
         objective = "binary:logistic",
-        scale_pos_weight = pos_weight,
+        # scale_pos_weight = pos_weight,
         n_estimators = 5000,
         early_stopping_rounds = 50,
         eval_metric = "logloss",
@@ -81,7 +88,7 @@ def objective_xgb(trial):
       # Define XGBoost classifier without pruning callback for remaining splits
       model_xgb = XGBClassifier(
         objective = "binary:logistic",
-        scale_pos_weight = pos_weight,
+        # scale_pos_weight = pos_weight,
         n_estimators = 5000,
         early_stopping_rounds = 50,
         eval_metric = "logloss",
@@ -104,7 +111,13 @@ def objective_xgb(trial):
     x_val = pipe_process.transform(x_val)
 
     # Fit model and save best score achieved with early stopping
-    model_xgb.fit(X = x_tr, y = y_tr, eval_set = [(x_val, y_val)], verbose = False)
+    model_xgb.fit(
+      X = x_tr, 
+      y = y_tr, 
+      sample_weight = sample_weight,
+      eval_set = [(x_val, y_val)], 
+      sample_weight_eval_set = [sample_weight_val],
+      verbose = False)
     cv_scores.append(model_xgb.best_score)
 
   return np.mean(cv_scores)
