@@ -9,12 +9,22 @@ exec(open("04_Preprocessing.py").read())
 
 
 import matplotlib.pyplot as plt
-from sklearn.metrics import auc, precision_recall_curve, brier_score_loss
+import seaborn as sns
+from sklearn.metrics import average_precision_score, brier_score_loss
+from sklearn.metrics import PrecisionRecallDisplay, precision_recall_curve
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.kernel_approximation import RBFSampler
+from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
+
+
+# Set plotting options
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams["figure.autolayout"] = True
+sns.set_style("darkgrid")
 
 
 # Compute class weight
@@ -24,25 +34,26 @@ sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 
 
-# Create dummy classifier pipeline
-pipe_dummy = Pipeline(steps = [
-  ("preprocessing", pipe_process),
-  ("model_dummy", DummyClassifier(strategy = "prior"))
-])
+# Create dummy classifier
+model_dummy = DummyClassifier(strategy = "prior")
 
 
 # Create logistic regression pipeline with optimal hyperparameters
 best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
 pipe_logistic = Pipeline(steps = [
   ("preprocessing", pipe_process),
-  ("model_logistic", LogisticRegression(
+  ("model_logistic", SGDClassifier(
+      loss = "log_loss",
       penalty = "elasticnet",
-      C = (1 / best_trial_logistic["params_reg_strength"]),
+      alpha = best_trial_logistic["params_reg_strength"],
       l1_ratio = best_trial_logistic["params_l1_ratio"],
-      solver = "saga",
-      random_state = 1923,
       max_iter = 1000,
-      class_weight = "balanced",
+      verbose = 1,
+      random_state = 1923,
+      early_stopping = True,
+      validation_fraction = 0.1,
+      n_iter_no_change = 10,
+      class_weight = "balanced"
     )
   )
 ])
@@ -58,7 +69,7 @@ pipe_svm = Pipeline(steps = [
       random_state = 1923
     )
   ),
-  ("model_svm", SGDClassifier(
+  ("model_svm", CalibratedClassifierCV(SGDClassifier(
       loss = "hinge",
       penalty = "elasticnet",
       alpha = best_trial_svm["params_reg_strength"],
@@ -70,6 +81,7 @@ pipe_svm = Pipeline(steps = [
       validation_fraction = 0.1,
       n_iter_no_change = 10,
       class_weight = "balanced"
+      )
     )
   )
 ])
@@ -81,7 +93,7 @@ pipe_xgb = Pipeline(steps = [
   ("preprocessing", pipe_process),
   ("model_xgb", XGBClassifier(
       objective = "binary:logistic",
-      n_estimators = 29,
+      n_estimators = 30,
       eval_metric = "logloss",
       tree_method = "gpu_hist",
       gpu_id = 0,
@@ -100,89 +112,216 @@ pipe_xgb = Pipeline(steps = [
 ])
 
 
-# Make named dictionary of models
+# Make dict of models
 models_dict = {
-  "Dummy classifier": pipe_dummy,
-  "Elastic net logistic": pipe_logistic,
-  "SVM with SGD, RBF kernel": pipe_svm,
+  "Dummy": model_dummy,
+  "Logistic": pipe_logistic,
+  "SVM": pipe_svm,
   "XGBoost": pipe_xgb
 }
 
 
-# Define function that fits every model pipeline & scores test data, plots PRC
-# curve
-def score_models(models_dict):
+# Train, predict & score each model
+preds_class = {}
+preds_prob = {}
+scores_avg_precision = {}
+scores_brier = {}
+
+for key in models_dict.keys():
   
-  # Make dataframe to store precision-recall values for each threshold
-  df_prc = pd.DataFrame(
-    columns = ["Model", "Precision", "Recall"])
+  # Fit model
+  model = models_dict[key]
+  model.fit(x_train, y_train)
   
-  # Make dataframe to store PRAUC & Brier scores
-  df_scores = pd.DataFrame(
-    columns = ["Model", "PRAUC", "Brier score"]
+  # Predict class
+  y_pred = model.predict(x_test)
+  preds_class[key] = y_pred
+  
+  # Predict positive class prob
+  y_prob = model.predict_proba(x_test)
+  y_prob = np.array([x[1] for x in y_prob])
+  preds_prob[key] = y_prob
+  
+  # Retrieve average precision scores
+  avg_precision = average_precision_score(y_test, preds_prob[key])
+  scores_avg_precision[key] = avg_precision
+  
+  # Retrieve Brier scores
+  brier_score = brier_score_loss(
+    y_test, preds_prob[key], sample_weight = sample_weight_test)
+  scores_brier[key] = brier_score
+
+
+# Retrieve Brier skill scores for each model, with dummy classifier as reference
+scores_brier_skill = {}
+
+for key in models_dict.keys():
+  
+  brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
+  scores_brier_skill[key] = brier_skill
+
+
+# Retrieve F1 scores at different thresholds
+scores_f1 = {}
+scores_f1_best = {}
+
+scores_precision = {}
+scores_precision_best = {}
+
+scores_recall = {}
+scores_recall_best = {}
+
+threshold_probs = {}
+threshold_probs_best = {}
+
+for key in models_dict.keys():
+  
+  precision, recall, thresholds = precision_recall_curve(y_test, preds_prob[key])
+  f1_scores = 2 * recall * precision / (recall + precision)
+
+  scores_f1[key] = f1_scores
+  scores_f1_best[key] = max(f1_scores)
+  
+  scores_precision[key] = precision
+  scores_precision_best[key] = precision[np.argmax(f1_scores)]
+  
+  scores_recall[key] = recall
+  scores_recall_best[key] = recall[np.argmax(f1_scores)]
+  
+  threshold_probs[key] = thresholds
+  threshold_probs_best[key] = thresholds[np.argmax(f1_scores)]
+  
+  
+# Retrieve dataframe of scores
+df_scores = pd.DataFrame(
+  {
+  "Avg. precision (PRAUC)": scores_avg_precision.values(),
+  "Brier score": scores_brier.values(),
+  "Brier skill scores": scores_brier_skill.values(),
+  "Best F1 score": scores_f1_best.values(),
+  "Precision at best F1": scores_precision_best.values(),
+  "Recall at best F1": scores_recall_best.values(),
+  "Threshold prob. at best F1": threshold_probs_best.values()
+  }, index = models_dict.keys()
+)
+df_scores.to_csv("./ModifiedData/scores.csv", index = True)
+
+
+# Get dataframes for F1 score - threshold prob plots
+
+# Logistic
+df_f1_logistic = pd.DataFrame(
+  {"F1 score": scores_f1["Logistic"][:-1],
+   "Precision": scores_precision["Logistic"][:-1],
+   "Recall": scores_recall["Logistic"][:-1],
+   "Threshold prob.": threshold_probs["Logistic"]
+  }
+).melt(
+  value_vars = ["F1 score", "Precision", "Recall"], 
+  var_name = "Metric",
+  value_name = "Score",
+  id_vars = "Threshold prob."
   )
-  
-  for key in models_dict.keys():
-    
-    # Fit model, predict classes & probs for test data
-    model = models_dict[key]
-    model.fit(x_train, y_train)
-    y_pred = model.predict(x_test)
-    y_prob = model.predict_proba(x_test)
-    y_prob_pos = np.array([x[1] for x in y_prob])
-    
-    # Compute PRC values
-    precision, recall, threshold = precision_recall_curve(
-      y_test, y_prob_pos, pos_label = 1)
-    
-    # Compute PRAUC
-    prauc = auc(recall, precision)
-    
-    # Compute Brier score
-    brier_score = brier_score_loss(
-      y_test, y_prob_pos, pos_label = 1, sample_weight = sample_weight_test)
-    
-    # Make dataframe of precision-recall values for each threshold
-    prc = pd.DataFrame({
-      "Model": np.repeat(key, len(precision)),
-      "Precision": precision,
-      "Recall": recall
-    }, index = [0])
-    
-    # Concatenate PRC values to full dataframe
-    df_prc = pd.concat([df_prc, prc])
-    
-    # Make dataframe of PRAUC & Brier scores, concatenate to full dataframe
-    scores = pd.DataFrame({
-      "Model": key,
-      "PRAUC": prauc,
-      "Brier score": brier_score
-    })
-    df_scores = pd.concat([df_scores, scores])
-  
-  return df_prc, df_scores
+
+# SVM
+df_f1_svm = pd.DataFrame(
+  {"F1 score": scores_f1["SVM"][:-1],
+   "Precision": scores_precision["SVM"][:-1],
+   "Recall": scores_recall["SVM"][:-1],
+   "Threshold prob.": threshold_probs["SVM"]
+  }
+).melt(
+  value_vars = ["F1 score", "Precision", "Recall"], 
+  var_name = "Metric",
+  value_name = "Score",
+  id_vars = "Threshold prob."
+  )
+
+# XGBoost
+df_f1_xgb = pd.DataFrame(
+  {"F1 score": scores_f1["XGBoost"][:-1],
+   "Precision": scores_precision["XGBoost"][:-1],
+   "Recall": scores_recall["XGBoost"][:-1],
+   "Threshold prob.": threshold_probs["XGBoost"]
+  }
+).melt(
+  value_vars = ["F1 score", "Precision", "Recall"], 
+  var_name = "Metric",
+  value_name = "Score",
+  id_vars = "Threshold prob."
+  )
 
 
-# Retrieve PRC values & performance scores
-df_prc, df_scores = score_models(models_dict)
+# Plot precision-recall curves
+fig, ax = plt.subplots()
+for key in preds_prob.keys():
+  _ = PrecisionRecallDisplay.from_predictions(y_test, preds_prob[key], name = key, ax = ax)
+_ = plt.title("Precision-recall curves of classifiers")
+_ = plt.legend(loc = "upper right")
+plt.show()
+plt.savefig("./Plots/prc.png", dpi = 300)
+plt.close("all")
 
 
+# Plot F1 score - threshold prob. plots
+fig, ax = plt.subplots(3, sharex = True, sharey= True)
+_ = fig.suptitle("F1 - precision - recall scores across threshold probabilities")
 
-# Fit on training data, predict testing data, retrieve positive label probs
-pipe_logistic.fit(x_train, y_train)
-y_pred = pipe_logistic.predict(x_test)
-y_prob = pipe_logistic.predict_proba(x_test)
-y_prob_pos = np.array([x[1] for x in y_prob])
+# Logistic
+_ = sns.lineplot(
+  ax = ax[0], 
+  x = "Threshold prob.", y = "Score", hue = "Metric", 
+  data = df_f1_logistic, legend = False)
+_ = ax[0].set_title("Logistic")
 
-# Compute PRC values
-precision, recall, thresholds = precision_recall_curve(y_test, y_prob_pos, pos_label = 1)
+# SVM
+_ = sns.lineplot(
+  ax = ax[1], 
+  x = "Threshold prob.", y = "Score", hue = "Metric", 
+  data = df_f1_svm)
+_ = ax[1].set_title("SVM")
 
-# Compute PRAUC
-# 0.4307 for LogisticRegression
-auc(recall, precision)
+# XGBoost
+_ = sns.lineplot(
+  ax = ax[2], 
+  x = "Threshold prob.", y = "Score", hue = "Metric", 
+  data = df_f1_xgb, legend = False)
+_ = ax[2].set_title("XGBoost")
 
-# Compute Brier score
-# 0.194 for LogisticRegression
-brier_score_loss(y_test, y_prob_pos, pos_label = 1, sample_weight = sample_weight_test)
+plt.show()
+plt.savefig("./Plots/f1.png", dpi = 300)
+plt.close("all")
 
 
+# Plot predicted probability distributions of classifiers
+fig, ax = plt.subplots(3, sharex = True, sharey= True)
+_ = fig.suptitle("Distributions of positive class probability predictions")
+
+# Logistic
+_ = sns.histplot(
+  ax = ax[0], 
+  x = "Logistic", 
+  data = preds_prob)
+_ = ax[0].set_title("Logistic")
+_ = ax[0].set_ylabel("N. of times predicted")
+
+# SVM
+_ = sns.histplot(
+  ax = ax[1], 
+  x = "SVM", 
+  data = preds_prob)
+_ = ax[1].set_title("SVM")
+_ = ax[1].set_ylabel("N. of times predicted")
+
+# XGBoost
+_ = sns.histplot(
+  ax = ax[2], 
+  x = "XGBoost", 
+  data = preds_prob)
+_ = ax[2].set_title("XGBoost")
+_ = ax[2].set_xlabel("Probability predictions")
+_ = ax[2].set_ylabel("N. of times predicted")
+
+plt.show()
+plt.savefig("./Plots/prob_dist.png", dpi = 300)
+plt.close("all")

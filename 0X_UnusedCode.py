@@ -84,3 +84,173 @@ classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
 sample_weight = np.where(y_train == 1, class_weight[0], class_weight[1])
 
+
+# # Create logistic regression pipeline with optimal hyperparameters
+# best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
+# pipe_logistic = Pipeline(steps = [
+#   ("preprocessing", pipe_process),
+#   ("model_logistic", LogisticRegression(
+#       penalty = "elasticnet",
+#       C = (1 / best_trial_logistic["params_reg_strength"]),
+#       l1_ratio = best_trial_logistic["params_l1_ratio"],
+#       solver = "saga",
+#       random_state = 1923,
+#       max_iter = 1000,
+#       class_weight = "balanced",
+#     )
+#   )
+# ])
+
+
+# Fit on training data, predict testing data, retrieve positive label probs
+pipe_logistic.fit(x_train, y_train)
+y_pred = pipe_logistic.predict(x_test)
+y_prob = pipe_logistic.predict_proba(x_test)
+y_prob_pos = np.array([x[1] for x in y_prob])
+
+# Compute PRC values
+precision, recall, thresholds = precision_recall_curve(y_test, y_prob_pos, pos_label = 1)
+
+pd.DataFrame({
+  "Model": "Logistic",
+  "Precision": precision,
+  "Recall": recall})
+  
+for key in models_dict.keys():
+  print(models_dict[key])
+  
+
+# Compute PRAUC
+# 0.4307 for LogisticRegression
+# 0.4223 for SGD with native early stopping
+auc(recall, precision)
+
+# Compute Brier score
+# 0.194 for LogisticRegression
+# 0.1958 for SGD with native early stopping
+brier_score_loss(y_test, y_prob_pos, pos_label = 1, sample_weight = sample_weight_test)
+
+
+# Compute Brier skill score for each model, with dummy classifier as reference:
+# 1 - (brier_score_model / brier_score_dummy) (1 is best, 0 is worst)
+
+
+
+
+
+# Make named dictionary of models
+models_dict = {
+  "Dummy": pipe_dummy,
+  "Logistic": pipe_logistic,
+  "SVM": pipe_svm,
+  "XGBoost": pipe_xgb
+}
+
+
+# Fit models
+
+
+
+
+# Define function that fits every model pipeline & scores test data, plots PRC
+# curve
+def score_models(models_dict):
+  
+  # # Make dataframe to store precision-recall values for each threshold
+  # df_prc = pd.DataFrame(
+  #   columns = ["Model", "Precision", "Recall"])
+  
+  # Make dataframe to store PRAUC & Brier scores
+  df_scores = pd.DataFrame(
+    columns = ["Model", "Avg. precision score", "Brier score"]
+  )
+  
+  for key in models_dict.keys():
+    
+    # Fit model, predict classes & probs for test data
+    model = models_dict[key]
+    model.fit(x_train, y_train)
+    y_pred = model.predict(x_test)
+    y_prob = model.predict_proba(x_test)
+    y_prob_pos = np.array([x[1] for x in y_prob])
+    
+    # Compute PRC values
+    precision, recall, threshold = precision_recall_curve(
+      y_test, y_prob_pos, pos_label = 1)
+      
+    # Compute Average precision score
+    avg_precision = average_precision_score(y_test, y_prob_pos, pos_label = 1)
+    
+    # Compute Brier score
+    brier_score = brier_score_loss(
+      y_test, y_prob_pos, pos_label = 1, sample_weight = sample_weight_test)
+    
+    # Make dataframe of precision-recall values for each threshold
+    prc = pd.DataFrame({
+      "Model": key,
+      "Precision": precision,
+      "Recall": recall
+    })
+    
+    # Concatenate PRC values to full dataframe
+    df_prc = pd.concat([df_prc, prc])
+    
+    # Make dataframe of PRAUC & Brier scores, concatenate to full dataframe
+    scores = pd.DataFrame({
+      "Model": [key],
+      "Avg. precision score": [avg_precision],
+      "Brier score": [brier_score]
+    })
+    df_scores = pd.concat([df_scores, scores])
+  
+  # Drop dummy classifier's PRC values
+  df_prc = df_prc.loc[df_prc["Model"] != "Dummy"]
+  
+  return df_prc, df_scores
+
+
+# Retrieve PRC values & performance scores
+df_prc, df_scores = score_models(models_dict)
+
+
+# Plot PRC curves
+_ = sns.lineplot(x = "Recall", y = "Precision", data = df_prc, hue = "Model")
+plt.show()
+plt.close("all")
+
+
+
+
+# Fit on training data, predict testing data, retrieve positive label probs
+pipe_dummy.fit(x_train, y_train)
+y_pred = pipe_dummy.predict(x_test)
+y_prob = pipe_dummy.predict_proba(x_test)
+y_prob_pos = np.array([x[1] for x in y_prob])
+
+# Compute PRC values
+precision, recall, thresholds = precision_recall_curve(y_test, y_prob_pos, pos_label = 1)
+
+
+# Compute Average Precision
+# 0.4307 for LogisticRegression
+# 0.4223 for SGD with native early stopping
+average_precision_score(y_test, y_prob_pos, pos_label = 1)
+
+
+# Compute Brier score
+# 0.194 for LogisticRegression
+# 0.1958 for SGD with native early stopping
+brier_score_loss(y_test, y_prob_pos, pos_label = 1, sample_weight = sample_weight_test)
+
+
+# Compute Brier skill score for each model, with dummy classifier as reference:
+# 1 - (brier_score_model / brier_score_dummy) (1 is best, 0 is worst)
+
+
+
+
+# Create dummy classifier pipeline
+pipe_dummy = Pipeline(steps = [
+  ("preprocessing", pipe_process),
+  ("model_dummy", DummyClassifier(strategy = "prior"))
+])
