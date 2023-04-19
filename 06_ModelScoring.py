@@ -42,7 +42,7 @@ model_dummy = DummyClassifier(strategy = "prior")
 best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
 pipe_logistic = Pipeline(steps = [
   ("preprocessing", pipe_process),
-  ("model_logistic", SGDClassifier(
+  ("Logistic", SGDClassifier(
       loss = "log_loss",
       penalty = "elasticnet",
       alpha = best_trial_logistic["params_reg_strength"],
@@ -52,8 +52,7 @@ pipe_logistic = Pipeline(steps = [
       random_state = 1923,
       early_stopping = True,
       validation_fraction = 0.1,
-      n_iter_no_change = 10,
-      class_weight = "balanced"
+      n_iter_no_change = 10
     )
   )
 ])
@@ -63,13 +62,13 @@ pipe_logistic = Pipeline(steps = [
 best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
 pipe_svm = Pipeline(steps = [
   ("preprocessing", pipe_process),
-  ("kernel_rbf", RBFSampler(
+  ("KernelTrick", RBFSampler(
       gamma = "scale",
       n_components = 100,
       random_state = 1923
     )
   ),
-  ("model_svm", CalibratedClassifierCV(SGDClassifier(
+  ("SVM", CalibratedClassifierCV(SGDClassifier(
       loss = "hinge",
       penalty = "elasticnet",
       alpha = best_trial_svm["params_reg_strength"],
@@ -79,8 +78,7 @@ pipe_svm = Pipeline(steps = [
       random_state = 1923,
       early_stopping = True,
       validation_fraction = 0.1,
-      n_iter_no_change = 10,
-      class_weight = "balanced"
+      n_iter_no_change = 10
       )
     )
   )
@@ -91,7 +89,7 @@ pipe_svm = Pipeline(steps = [
 best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
 pipe_xgb = Pipeline(steps = [
   ("preprocessing", pipe_process),
-  ("model_xgb", XGBClassifier(
+  ("XGBoost", XGBClassifier(
       objective = "binary:logistic",
       n_estimators = 30,
       eval_metric = "logloss",
@@ -129,9 +127,18 @@ scores_brier = {}
 
 for key in models_dict.keys():
   
-  # Fit model
+  # Retrieve model
   model = models_dict[key]
-  model.fit(x_train, y_train)
+  
+  # Fit model
+  if key == "Dummy":
+    model.fit(x_train, y_train)
+    
+  else:
+    
+    # Create unique sample weights argument for pipeline.fit
+    kwargs = {model.steps[-1][0] + "__sample_weight": sample_weight_train}
+    model.fit(x_train, y_train, **kwargs)
   
   # Predict class
   y_pred = model.predict(x_test)
@@ -146,7 +153,7 @@ for key in models_dict.keys():
   avg_precision = average_precision_score(y_test, preds_prob[key])
   scores_avg_precision[key] = avg_precision
   
-  # Retrieve Brier scores
+  # Retrieve Brier scores (Dummy classifier throws error with sample_weight)
   brier_score = brier_score_loss(
     y_test, preds_prob[key], sample_weight = sample_weight_test)
   scores_brier[key] = brier_score
@@ -292,14 +299,14 @@ _ = fig.suptitle("F1 - precision - recall scores across threshold probabilities"
 _ = sns.lineplot(
   ax = ax[0], 
   x = "Threshold prob.", y = "Score", hue = "Metric", 
-  data = df_f1_logistic, legend = False)
+  data = df_f1_logistic)
 _ = ax[0].set_title("Logistic")
 
 # SVM
 _ = sns.lineplot(
   ax = ax[1], 
   x = "Threshold prob.", y = "Score", hue = "Metric", 
-  data = df_f1_svm)
+  data = df_f1_svm, legend = False)
 _ = ax[1].set_title("SVM")
 
 # XGBoost
