@@ -9,7 +9,7 @@ exec(open("04_Preprocessing.py").read())
 
 
 import optuna
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import SGDClassifier
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import log_loss
 

@@ -252,6 +252,27 @@ df_f1_xgb = pd.DataFrame(
   )
 
 
+# Get dataframes for stacked histogram plots
+
+# Logistic
+df_preds_logistic = pd.DataFrame({
+  "Prob. predictions": preds_prob["Logistic"],
+  "Actual labels": y_test,
+})
+
+# SVM
+df_preds_svm = pd.DataFrame({
+  "Prob. predictions": preds_prob["SVM"],
+  "Actual labels": y_test,
+})
+
+# XGBoost
+df_preds_xgb = pd.DataFrame({
+  "Prob. predictions": preds_prob["XGBoost"],
+  "Actual labels": y_test,
+})
+
+
 # Plot precision-recall curves
 fig, ax = plt.subplots()
 for key in preds_prob.keys():
@@ -300,26 +321,34 @@ _ = fig.suptitle("Distributions of positive class probability predictions")
 # Logistic
 _ = sns.histplot(
   ax = ax[0], 
-  x = "Logistic", 
-  data = preds_prob)
+  x = "Prob. predictions", 
+  hue = "Actual labels",
+  multiple = "stack",
+  data = df_preds_logistic)
 _ = ax[0].set_title("Logistic")
 _ = ax[0].set_ylabel("N. of times predicted")
 
 # SVM
 _ = sns.histplot(
   ax = ax[1], 
-  x = "SVM", 
-  data = preds_prob)
+  x = "Prob. predictions",
+  hue = "Actual labels",
+  multiple = "stack",
+  data = df_preds_svm,
+  legend = False)
 _ = ax[1].set_title("SVM")
 _ = ax[1].set_ylabel("N. of times predicted")
 
 # XGBoost
 _ = sns.histplot(
   ax = ax[2], 
-  x = "XGBoost", 
-  data = preds_prob)
+  x = "Prob. predictions",
+  hue = "Actual labels",
+  multiple = "stack",
+  data = df_preds_xgb,
+  legend = False)
 _ = ax[2].set_title("XGBoost")
-_ = ax[2].set_xlabel("Probability predictions")
+_ = ax[2].set_xlabel("Probability predictions for positive class")
 _ = ax[2].set_ylabel("N. of times predicted")
 
 plt.show()

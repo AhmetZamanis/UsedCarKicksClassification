@@ -1,4 +1,98 @@
 
+# Debug SGD partial fit
+
+# t_ does properly update after each epoch, and is reset with each validation fold.
+
+# After looking at the source code, it seems fit and partial_fit use the "optimal"
+# learning rate the same way, though it's hard to confirm. Both fit and partial_fit
+# calls _fit_regressor which calls _plain_sgd, which seems to work the same way, 
+# with only difference being max_iter = 1 for partial_fit.
+
+# _plain_sgd does adjust the optimal learning rate and shuffle the data for each iter,
+# regardless of number of iterations.
+cv_scores = []
+  
+for i, (train_index, val_index) in enumerate(cv_indices):
+  
+  # Split training-validation data
+  x_tr = x_train.iloc[train_index, ]
+  y_tr = y_train.iloc[train_index, ]
+  x_val = x_train.iloc[val_index, ]
+  y_val = y_train.iloc[val_index, ]
+    
+  # Compute class weight
+  classes = list(set(y_tr))
+  class_weight = compute_class_weight("balanced", classes = classes, y = y_tr)
+  sample_weight = np.where(y_tr == 1, class_weight[1], class_weight[0])
+  sample_weight_val = np.where(y_val == 1, class_weight[1], class_weight[0])
+    
+  # Define Logistic Regression classifier with SGD
+  model_logistic = SGDClassifier(
+    loss = "log_loss", # Log loss for probabilistic logistic regression
+    penalty = "elasticnet",
+    learning_rate = "optimal", # Dynamically adjusted based on regularization strength 
+    random_state = 1923,
+    verbose = 0, # Change to 1 to print epochs for debugging if needed
+    alpha = 0.005,
+    l1_ratio = 0.3
+    )
+    
+  # Perform preprocessing
+  x_tr = pipe_process.fit_transform(x_tr, y_tr)
+  x_val = pipe_process.transform(x_val)
+    
+  # Perform epoch by epoch training with early stopping & pruning
+  epoch_scores = []
+  n_iter_no_change = 0
+  tol = 0.001
+    
+  for epoch in range(1000):
+    
+    # Print epoch number, parameters that will be used, n. of weight updates performed
+    print("Starting epoch: " + str(epoch) + "\n")
+    
+    print("Parameters: " + str(model_logistic.get_params()) + "\n")
+    
+    if epoch > 0:
+      print("N. weight updates performed: " + str(model_logistic.t_) + "\n")
+      
+    # Train model for 1 epoch
+    _ = model_logistic.partial_fit(x_tr, y_tr, classes = classes, sample_weight = sample_weight)
+      
+    # Score epoch
+    y_pred = model_logistic.predict_proba(x_val)
+    epoch_score = log_loss(y_val, y_pred, sample_weight = sample_weight_val)
+      
+    # Count epochs with no improvement after first 10 epochs
+    if epoch > 9:
+      if (epoch_score > min(epoch_scores) - tol):
+        n_iter_no_change += 1
+      
+    # Append epoch score to list of epoch scores
+    epoch_scores.append(epoch_score)
+    
+    # Early stop training if necessary
+    if n_iter_no_change == 10:
+      print("Early stopping at epoch " + str(epoch))
+      break 
+     
+  # Append best epoch score to CV scores
+  cv_scores.append(min(epoch_scores))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 from category_encoders.datasets import load_compass, load_postcodes
 
