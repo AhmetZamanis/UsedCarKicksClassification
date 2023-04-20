@@ -62,12 +62,11 @@ class TwoHiddenLayers(pl.LightningModule):
     
     # Define architecture  
     self.network = torch.nn.Sequential(
-    torch.nn.Linear(in_features = 88, out_features = hidden_size), # Input layer
-    torch.nn.ReLU(), # Activation 1
-    torch.nn.Linear(in_features = hidden_size, out_features = hidden_size), # Hidden 1
-    torch.nn.ReLU(), # Activation 2
-    torch.nn.Linear(in_features = hidden_size,  out_features = hidden_size), # Hidden 2
-    torch.nn.Linear(in_features = hidden_size, out_features = 1) # Output layer
+      torch.nn.LazyLinear(hidden_size), # Hidden layer 1
+      torch.nn.ReLU(), # Activation 1
+      torch.nn.LazyLinear(hidden_size), # Hidden layer 2
+      torch.nn.ReLU(), # Activation 2
+      torch.nn.LazyLinear(1) # Output layer
       # No Sigmoid activation here because the loss function has it built-in
     )
   
@@ -86,7 +85,7 @@ class TwoHiddenLayers(pl.LightningModule):
       pred, y, pos_weight = class_weight)
     self.log(
       "train_loss", loss, 
-      on_step = True, on_epoch = True, prog_bar = True, logger = True)
+      on_epoch = True, prog_bar = True, logger = False)
     return loss
   
   # Define validation loop
@@ -98,7 +97,8 @@ class TwoHiddenLayers(pl.LightningModule):
     loss = torch.nn.functional.binary_cross_entropy_with_logits(
       pred, y, pos_weight = class_weight)
     self.log(
-      "val_loss", loss)
+      "val_loss", loss, 
+      on_epoch = True, prog_bar = True, logger = False)
     return loss
   
   # Define prediction method (because the default just runs forward(), and it
@@ -118,7 +118,7 @@ class TwoHiddenLayers(pl.LightningModule):
     lr_scheduler = torch.optim.lr_scheduler.CyclicLR(
       optimizer, 
       base_lr = learning_rate, max_lr = (learning_rate * 10), step_size_up = 400,
-      cycle_momentum = False, mode = "exp_range", gamma = 0.8, verbose = True)
+      cycle_momentum = False, mode = "exp_range", gamma = 0.8)
     
     return {
     "optimizer": optimizer,
@@ -137,24 +137,26 @@ val_data = TorchDataset(x_test, y_test)
 
 # Create data loaders
 train_loader = torch.utils.data.DataLoader(
-  train_data, batch_size = 64, num_workers = 4, shuffle = True)
+  train_data, batch_size = 64, num_workers = 0, shuffle = True)
 val_loader = torch.utils.data.DataLoader(
-  val_data, batch_size = 64, num_workers = 4, shuffle = False)
+  val_data, batch_size = 64, num_workers = 0, shuffle = False)
 
 
-# Create trainer
-trainer = pl.Trainer(
-  max_epochs = 100,
-  accelerator = "gpu", precision = "16-mixed", 
-  callbacks = pl.callbacks.EarlyStopping(
+# Create trainer & callbacks
+callback_earlystop = pl.callbacks.EarlyStopping(
     monitor = "val_loss",
     min_delta = 1e-3,
-    patience = 5
-    )
+    patience = 5)
+    
+trainer = pl.Trainer(
+  enable_checkpointing = False,
+  max_epochs = 100,
+  accelerator = "gpu", precision = "16-mixed", 
+  callbacks = [callback_earlystop]
   )
 
 
 # Train model
 model = TwoHiddenLayers()
 trainer.fit(model, train_loader, val_loader)
-    
+
