@@ -1,4 +1,4 @@
-# Used cars kicks classification - Modeling, Neural Network with PyTorch
+# Used cars kicks classification - NN implementation in PyTorch
 # Data source: 
 # https://www.openml.org/search?type=data&sort=runs&id=41162&status=active
 # https://www.kaggle.com/competitions/DontGetKicked/overview
@@ -9,7 +9,6 @@ exec(open("04_Preprocessing.py").read())
 
 
 import torch
-import optuna
 from sklearn.utils.class_weight import compute_class_weight
 
 
@@ -25,6 +24,7 @@ x_test = pipe_process.transform(x_test)
 # Compute class weight
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
+class_weight = torch.tensor(class_weight[1], dtype = torch.float32)
 
 
 # Define Dataset class: Takes in preprocessed features & targets
@@ -33,7 +33,7 @@ class TorchDataset(torch.utils.data.Dataset):
   # Store preprocessed features & targets
   def __init__(self, x_train, y_train):
     self.x = torch.tensor(x_train, dtype = torch.float32) # Store features
-    self.y = torch.tensor(y_train.values, dtype = torch.int32) # Store targets
+    self.y = torch.tensor(y_train.values, dtype = torch.float32).unsqueeze(1) # Store targets
   
   # Return data length  
   def __len__(self):
@@ -52,12 +52,6 @@ val_data = TorchDataset(x_test, y_test)
 # Create data loaders
 train_loader = torch.utils.data.DataLoader(train_data, batch_size = 64, shuffle = True)
 val_loader = torch.utils.data.DataLoader(val_data, batch_size = 64, shuffle = True)
-
-
-# One iteration of dataloader
-train_x, train_y = next(iter(train_loader))
-train_x.size()
-train_y.size()  
 
 
 # Get training device
@@ -83,19 +77,17 @@ class TwoHiddenLayers(torch.nn.Module):
       torch.nn.ReLU(), # Activation 2
       torch.nn.Linear(in_features = hidden_size2,  out_features = output_size), # Hidden 2
       torch.nn.Linear(in_features = output_size, out_features = 1) # Output layer
-      # torch.nn.Sigmoid() # Sigmoid activation for prob. output  
+      # No Sigmoid activation here because the loss function has it built-in
     )
   
   # Define forward propagation
   def forward(self, x):
-    prob = self.network(x)
-    return prob
+    output = self.network(x)
+    return output
     
 
 # Create model
 model_nn = TwoHiddenLayers()
-model_nn.network
-print(torch.nn.Linear(in_features = 88, out_features = hidden_size1).weight.dtype)
 
 
 # Define hyperparameters
@@ -105,10 +97,8 @@ epochs = 10
 
 
 # Define loss function with class weights, optimizer
-# loss_fn = torch.nn.CrossEntropyLoss(weight = torch.tensor(class_weight, dtype = torch.float32), reduction = "mean")
-loss_fn = torch.nn.BCEWithLogitsLoss(
-  pos_weight = torch.tensor(class_weight[1], dtype = torch.float32), 
-  reduction = "mean")
+# This loss function applies built-in sigmoid activation
+loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight = class_weight, reduction = "mean")
 optimizer = torch.optim.Adam(model_nn.parameters(), lr = learning_rate)
 
 
@@ -118,8 +108,6 @@ def train_loop(train_loader, model_nn, loss_fn, optimizer):
   size = len(train_loader.dataset) # Get n. of training obs.
   
   for batch, (x, y) in enumerate(train_loader): # For each training batch
-    
-    y = y.unsqueeze(1).float()
     
     # Perform training, calculate loss
     pred = model_nn(x)
@@ -144,8 +132,6 @@ def val_loop(val_loader, model_nn, loss_fn):
   
   with torch.no_grad(): # Disable gradient calculation for testing loop
     for x, y in val_loader: # For each validation batch
-      
-      y = y.unsqueeze(1).float()
       
       pred = model_nn(x) # Make prediction
       test_loss += loss_fn(pred, y).item() # Calculate loss

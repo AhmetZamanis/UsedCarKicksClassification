@@ -348,3 +348,12 @@ pipe_dummy = Pipeline(steps = [
   ("preprocessing", pipe_process),
   ("model_dummy", DummyClassifier(strategy = "prior"))
 ])
+
+
+
+
+# loss_fn = torch.nn.CrossEntropyLoss(weight = torch.tensor(class_weight, dtype = torch.float32), reduction = "mean")
+#y = y.unsqueeze(1).float()
+
+# One iteration of dataloader
+train_x, train_y = next(iter(train_loader))
