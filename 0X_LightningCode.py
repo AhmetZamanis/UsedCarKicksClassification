@@ -26,12 +26,18 @@ x_test = pipe_process.transform(x_test)
 # Compute class weight
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
-class_weight = torch.tensor(class_weight[1], dtype = torch.float32)
 
 
 # Set hyperparameters
-hidden_size = 64
-learning_rate = 1e-3
+hyperparams_dict = {
+  "n_hidden_layers": 2,
+  "input_size": 88,
+  "hidden_size": 64,
+  "learning_rate": 1e-3,
+  "l2": 1e-5,
+  "dropout": 0.1,
+  "class_weight": torch.tensor(class_weight[1], dtype = torch.float32)
+}
 
 
 # Define Dataset class: Takes in preprocessed features & targets
@@ -52,24 +58,56 @@ class TorchDataset(torch.utils.data.Dataset):
  
 
 # Define Lightning module
-class TwoHiddenLayers(pl.LightningModule):
+class SeluDropoutModel(pl.LightningModule):
   
   # Initialize model
-  def __init__(self):
+  def __init__(self, hyperparams_dict):
     
     # Delegate function to parent class
     super().__init__() 
     
-    # Define architecture  
-    self.network = torch.nn.Sequential(
-      torch.nn.LazyLinear(hidden_size), # Hidden layer 1
-      torch.nn.ReLU(), # Activation 1
-      torch.nn.LazyLinear(hidden_size), # Hidden layer 2
-      torch.nn.ReLU(), # Activation 2
-      torch.nn.LazyLinear(1) # Output layer
-      # No Sigmoid activation here because the loss function has it built-in
-    )
-  
+    # Define hyperparameters
+    self.n_hidden_layers = hyperparams_dict["n_hidden_layers"]
+    self.input_size = hyperparams_dict["input_size"]
+    self.hidden_size = hyperparams_dict["hidden_size"]
+    self.learning_rate = hyperparams_dict["learning_rate"]
+    self.l2 = hyperparams_dict["l2"]
+    self.dropout = hyperparams_dict["dropout"]
+    self.class_weight = hyperparams_dict["class_weight"]
+    
+    
+    # Define architecture 
+    
+    # Initialize layers list with first hidden layer
+    self.layers_list = torch.nn.ModuleList([
+      torch.nn.Linear(self.input_size, self.hidden_size), # Hidden layer 1
+      torch.nn.SELU(), # Activation 1
+      torch.nn.AlphaDropout(self.dropout) # Dropout 1
+      ])
+    
+    # Append extra hidden layers to layers list
+    for n in range(0, (self.n_hidden_layers - 1)):
+      self.layers_list.extend([
+        torch.nn.Linear(self.hidden_size, self.hidden_size), # Hidden layer N
+        torch.nn.SELU(), # Activation N
+        torch.nn.AlphaDropout(self.dropout) # Dropout N
+      ])
+    
+    # Append output layer to layers list
+    self.layers_list.append(
+      torch.nn.Linear(self.hidden_size, 1) # Output layer
+      # No sigmoid activation here, because the loss function has that built-in
+      )
+      
+    # Full network
+    self.network = torch.nn.Sequential(*self.layers_list)
+      
+    # Initialize weights
+    for layer in self.network:
+      if isinstance(layer, torch.nn.Linear):
+        torch.nn.init.kaiming_normal_(layer.weight, nonlinearity = "linear")
+        torch.nn.init.zeros_(layer.bias)
+    
   # Define forward propagation
   def forward(self, x):
     output = self.network(x.view(x.size(0), -1))
@@ -80,12 +118,12 @@ class TwoHiddenLayers(pl.LightningModule):
     
     # Perform training, calculate, log & return loss
     x, y = batch
-    pred = self.forward(x)
+    output = self.forward(x)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(
-      pred, y, pos_weight = class_weight)
+      output, y, pos_weight = self.class_weight)
     self.log(
       "train_loss", loss, 
-      on_epoch = True, prog_bar = True, logger = False)
+      on_epoch = True, prog_bar = True, logger = True)
     return loss
   
   # Define validation loop
@@ -93,32 +131,33 @@ class TwoHiddenLayers(pl.LightningModule):
     
     # Perform training, calculate, log & return loss
     x, y = batch
-    pred = self.forward(x)
+    output = self.forward(x)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(
-      pred, y, pos_weight = class_weight)
+      output, y, pos_weight = self.class_weight)
     self.log(
       "val_loss", loss, 
-      on_epoch = True, prog_bar = True, logger = False)
+      on_epoch = True, prog_bar = True, logger = True)
     return loss
   
-  # Define prediction method (because the default just runs forward(), and it
-  # doesn't have Sigmoid activation)
+  # Define prediction method (because the default just runs forward(), which
+  # doesn't have sigmoid activation without the loss function)
   def predict_step(self, batch, batch_idx):
     
-    # Run the forward propagation, apply Sigmoid activation
+    # Run the forward propagation, apply sigmoid activation
     return torch.nn.Sigmoid(self.network(x.view(x.size(0), -1)))
     
   # Define optimization algorithm, LR scheduler
   def configure_optimizers(self):
     
     # Optimizer
-    optimizer = torch.optim.Adam(self.parameters(), lr = learning_rate)
+    optimizer = torch.optim.Adam(
+      self.parameters(), lr = self.learning_rate, weight_decay = self.l2)
     
     # LR scheduler
     lr_scheduler = torch.optim.lr_scheduler.CyclicLR(
       optimizer, 
-      base_lr = learning_rate, max_lr = (learning_rate * 10), step_size_up = 400,
-      cycle_momentum = False, mode = "exp_range", gamma = 0.8)
+      base_lr = self.learning_rate, max_lr = (self.learning_rate * 10), 
+      step_size_up = 400, cycle_momentum = False, mode = "exp_range", gamma = 0.8)
     
     return {
     "optimizer": optimizer,
@@ -149,7 +188,6 @@ callback_earlystop = pl.callbacks.EarlyStopping(
     patience = 5)
     
 trainer = pl.Trainer(
-  enable_checkpointing = False,
   max_epochs = 100,
   accelerator = "gpu", precision = "16-mixed", 
   callbacks = [callback_earlystop]
@@ -157,6 +195,9 @@ trainer = pl.Trainer(
 
 
 # Train model
-model = TwoHiddenLayers()
+model = TwoHiddenLayers(hyperparams_dict = hyperparams_dict)
 trainer.fit(model, train_loader, val_loader)
 
+
+# Predict with best checkpoint
+trainer.predict(model, test_loader, ckpt_path = "best")

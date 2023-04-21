@@ -60,8 +60,7 @@ device = ("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define model, inheriting from nn.Module class
 input_size = 88
-hidden_size1 = 64
-hidden_size2 = 64
+hidden_size = 64
 output_size = 64
 
 class TwoHiddenLayers(torch.nn.Module):
@@ -71,11 +70,10 @@ class TwoHiddenLayers(torch.nn.Module):
     super().__init__() # Delegate function to parent class
     
     self.network = torch.nn.Sequential(
-      torch.nn.Linear(in_features = 88, out_features = hidden_size1), # Input layer
+      torch.nn.Linear(in_features = input_size, out_features = hidden_size), # Hidden 1
       torch.nn.ReLU(), # Activation 1
-      torch.nn.Linear(in_features = hidden_size1, out_features = hidden_size2), # Hidden 1
+      torch.nn.Linear(in_features = hidden_size,  out_features = hidden_size), # Hidden 2
       torch.nn.ReLU(), # Activation 2
-      torch.nn.Linear(in_features = hidden_size2,  out_features = output_size), # Hidden 2
       torch.nn.Linear(in_features = output_size, out_features = 1) # Output layer
       # No Sigmoid activation here because the loss function has it built-in
     )
