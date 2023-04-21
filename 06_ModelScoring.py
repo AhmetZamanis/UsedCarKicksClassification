@@ -47,12 +47,9 @@ pipe_logistic = Pipeline(steps = [
       penalty = "elasticnet",
       alpha = best_trial_logistic["params_reg_strength"],
       l1_ratio = best_trial_logistic["params_l1_ratio"],
-      max_iter = 1000,
+      max_iter = 26,
       verbose = 1,
-      random_state = 1923,
-      early_stopping = True,
-      validation_fraction = 0.1,
-      n_iter_no_change = 10
+      random_state = 1923
     )
   )
 ])
@@ -73,12 +70,9 @@ pipe_svm = Pipeline(steps = [
       penalty = "elasticnet",
       alpha = best_trial_svm["params_reg_strength"],
       l1_ratio = best_trial_svm["params_l1_ratio"],
-      max_iter = 1000,
+      max_iter = 31,
       verbose = 1,
-      random_state = 1923,
-      early_stopping = True,
-      validation_fraction = 0.1,
-      n_iter_no_change = 10
+      random_state = 1923
       )
     )
   )

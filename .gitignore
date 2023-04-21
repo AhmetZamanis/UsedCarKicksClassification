@@ -196,7 +196,6 @@ cython_debug/
 .pqt
 .parquet
 RawData/
-ModifiedData/
 
 # Quarto
 /.quarto/

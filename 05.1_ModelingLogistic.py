@@ -118,3 +118,73 @@ study_logistic.optimize(
 trials_logistic = study_logistic.trials_dataframe().sort_values("value", ascending = True)
 trials_logistic.to_csv("./ModifiedData/trials_logistic.csv", index = False)
 
+
+# Import best trial
+best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
+
+
+# Retrieve best early stop rounds with optimal parameters for each CV fold
+best_iterations = []
+for i, (train_index, val_index) in enumerate(cv_indices):
+  
+    # Split training-validation data
+    x_tr = x_train.iloc[train_index, ]
+    y_tr = y_train.iloc[train_index, ]
+    x_val = x_train.iloc[val_index, ]
+    y_val = y_train.iloc[val_index, ]
+    
+    # Compute class weight
+    classes = list(set(y_tr))
+    class_weight = compute_class_weight("balanced", classes = classes, y = y_tr)
+    sample_weight = np.where(y_tr == 1, class_weight[1], class_weight[0])
+    sample_weight_val = np.where(y_val == 1, class_weight[1], class_weight[0])
+    
+    # Define Logistic Regression classifier with SGD
+    model_logistic = SGDClassifier(
+      loss = "log_loss", # Log loss for probabilistic logistic regression
+      penalty = "elasticnet",
+      learning_rate = "optimal", # Dynamically adjusted based on regularization strength 
+      random_state = 1923,
+      verbose = 1, # Change to 1 to print epochs for debugging if needed
+      alpha = best_trial_logistic["params_reg_strength"],
+      l1_ratio = best_trial_logistic["params_l1_ratio"]
+    )
+        
+    # Perform preprocessing
+    x_tr = pipe_process.fit_transform(x_tr, y_tr)
+    x_val = pipe_process.transform(x_val)
+
+    # Perform epoch by epoch training with early stopping & pruning
+    epoch_scores = []
+    n_iter_no_change = 0
+    tol = 0.0001
+    
+    for epoch in range(1000):
+      
+      # Train model for 1 epoch
+      model_logistic.partial_fit(x_tr, y_tr, classes = classes, sample_weight = sample_weight)
+      
+      # Score epoch
+      y_pred = model_logistic.predict_proba(x_val)
+      epoch_score = log_loss(y_val, y_pred, sample_weight = sample_weight_val)
+      
+      # Count epochs with no improvement after first 10 epochs
+      if epoch > 10:
+        if (epoch_score > min(epoch_scores) - tol):
+          n_iter_no_change += 1
+      
+      # Append epoch score to list of epoch scores
+      epoch_scores.append(epoch_score)
+      
+      # Early stop training if necessary
+      if n_iter_no_change == 10:
+        print("Early stopping at epoch " + str(epoch))
+        break 
+     
+    # Append best iteration index
+    best_iterations.append(epoch_scores.index(min(epoch_scores)) + 1)
+
+
+# Retrieve median of best n_estimators: 26 iters
+int(np.median(best_iterations))
+int(np.mean(best_iterations))
