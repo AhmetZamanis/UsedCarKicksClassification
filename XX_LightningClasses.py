@@ -4,40 +4,8 @@
 # https://www.kaggle.com/competitions/DontGetKicked/overview
 
 
-# Source previous script
-exec(open("04_Preprocessing.py").read())
-
-
 import torch
 import lightning.pytorch as pl
-from sklearn.utils.class_weight import compute_class_weight
-
-
-# Set Torch settings
-torch.set_default_dtype(torch.float32)
-torch.set_float32_matmul_precision('high')
-
-
-# Apply scikit preprocessing pipeline
-x_train = pipe_process.fit_transform(x_train, y_train)
-x_test = pipe_process.transform(x_test)
-
-
-# Compute class weight
-classes = list(set(y_train))
-class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
-
-
-# Set hyperparameters
-hyperparams_dict = {
-  "n_hidden_layers": 2,
-  "input_size": 88,
-  "hidden_size": 64,
-  "learning_rate": 1e-3,
-  "l2": 1e-5,
-  "dropout": 0.1,
-  "class_weight": torch.tensor(class_weight[1], dtype = torch.float32)
-}
 
 
 # Define Dataset class: Takes in preprocessed features & targets
@@ -65,6 +33,8 @@ class SeluDropoutModel(pl.LightningModule):
     
     # Delegate function to parent class
     super().__init__() 
+    self.save_hyperparameters(logger = False)
+  
     
     # Define hyperparameters
     self.n_hidden_layers = hyperparams_dict["n_hidden_layers"]
@@ -74,7 +44,6 @@ class SeluDropoutModel(pl.LightningModule):
     self.l2 = hyperparams_dict["l2"]
     self.dropout = hyperparams_dict["dropout"]
     self.class_weight = hyperparams_dict["class_weight"]
-    
     
     # Define architecture 
     
@@ -156,8 +125,9 @@ class SeluDropoutModel(pl.LightningModule):
     # LR scheduler
     lr_scheduler = torch.optim.lr_scheduler.CyclicLR(
       optimizer, 
-      base_lr = self.learning_rate, max_lr = (self.learning_rate * 10), 
-      step_size_up = 400, cycle_momentum = False, mode = "exp_range", gamma = 0.8)
+      base_lr = self.learning_rate, max_lr = (self.learning_rate * 5), 
+      step_size_up = 200, # Heuristic: (2-8 * steps in one epoch)
+      cycle_momentum = False, mode = "exp_range", gamma = 0.99995)
     
     return {
     "optimizer": optimizer,
@@ -168,36 +138,3 @@ class SeluDropoutModel(pl.LightningModule):
       }
     }
 
-
-# Load data
-train_data = TorchDataset(x_train, y_train)
-val_data = TorchDataset(x_test, y_test)
-
-
-# Create data loaders
-train_loader = torch.utils.data.DataLoader(
-  train_data, batch_size = 64, num_workers = 0, shuffle = True)
-val_loader = torch.utils.data.DataLoader(
-  val_data, batch_size = 64, num_workers = 0, shuffle = False)
-
-
-# Create trainer & callbacks
-callback_earlystop = pl.callbacks.EarlyStopping(
-    monitor = "val_loss",
-    min_delta = 1e-3,
-    patience = 5)
-    
-trainer = pl.Trainer(
-  max_epochs = 100,
-  accelerator = "gpu", precision = "16-mixed", 
-  callbacks = [callback_earlystop]
-  )
-
-
-# Train model
-model = TwoHiddenLayers(hyperparams_dict = hyperparams_dict)
-trainer.fit(model, train_loader, val_loader)
-
-
-# Predict with best checkpoint
-trainer.predict(model, test_loader, ckpt_path = "best")
