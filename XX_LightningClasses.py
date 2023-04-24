@@ -7,6 +7,17 @@
 import torch
 import lightning.pytorch as pl
 
+# Careful: Optuna still uses "pytorch_lightning" to import the Pruning integration
+# with Ligtning, but Lightning itself is now imported as lightning.pytorch
+from optuna.integration.pytorch_lightning import PyTorchLightningPruningCallback
+
+
+# Create copy of Optuna callback with lightning.pytorch namespace as a workaround,
+# as Optuna code uses pytorch_lightning namespace
+class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
 
 # Define Dataset class: Takes in preprocessed features & targets
 class TorchDataset(torch.utils.data.Dataset):
@@ -85,27 +96,27 @@ class SeluDropoutModel(pl.LightningModule):
   # Define training loop
   def training_step(self, batch, batch_idx):
     
-    # Perform training, calculate, log & return loss
+    # Perform training, calculate log & return loss
     x, y = batch
     output = self.forward(x)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(
       output, y, pos_weight = self.class_weight)
     self.log(
       "train_loss", loss, 
-      on_epoch = True, prog_bar = True, logger = True)
+      on_step = False, on_epoch = True, prog_bar = True, logger = True)
     return loss
   
   # Define validation loop
   def validation_step(self, batch, batch_idx):
     
-    # Perform training, calculate, log & return loss
+    # Perform validation, calculate log & return loss
     x, y = batch
     output = self.forward(x)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(
       output, y, pos_weight = self.class_weight)
     self.log(
       "val_loss", loss, 
-      on_epoch = True, prog_bar = True, logger = True)
+      on_step = False, on_epoch = True, prog_bar = True, logger = True)
     return loss
   
   # Define prediction method (because the default just runs forward(), which

@@ -62,7 +62,7 @@ def objective_logistic(trial):
     n_iter_no_change = 0
     tol = 0.001
     
-    for epoch in range(1000):
+    for epoch in range(100):
       
       # Train model for 1 epoch
       model_logistic.partial_fit(x_tr, y_tr, classes = classes, sample_weight = sample_weight)
@@ -159,7 +159,7 @@ for i, (train_index, val_index) in enumerate(cv_indices):
     n_iter_no_change = 0
     tol = 0.0001
     
-    for epoch in range(1000):
+    for epoch in range(100):
       
       # Train model for 1 epoch
       model_logistic.partial_fit(x_tr, y_tr, classes = classes, sample_weight = sample_weight)

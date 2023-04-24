@@ -9,15 +9,10 @@ exec(open("04_Preprocessing.py").read())
 
 
 import optuna
-
-# Careful: Optuna still uses "pytorch_lightning" to import the Pruning integration
-# with Ligtning, but Lightning itself is now imported as lightning.pytorch
-from optuna.integration.pytorch_lightning import PyTorchLightningPruningCallback
-
 import torch
 import lightning.pytorch as pl
 from sklearn.utils.class_weight import compute_class_weight
-from XX_LightningClasses import TorchDataset, SeluDropoutModel
+from XX_LightningClasses import TorchDataset, SeluDropoutModel, OptunaPruning
 
 
 # Set Torch settings
@@ -83,14 +78,16 @@ def objective_nn(trial):
     # Create trainer & callbacks
     callback_earlystop = pl.callbacks.EarlyStopping(
       monitor = "val_loss",
-      min_delta = 1e-3,
+      min_delta = 1e-4,
       patience = 10)
       
-    callback_pruner = PyTorchLightningPruningCallback(trial, monitor = "val_loss")
+    callback_pruner = OptunaPruning(trial, monitor = "val_loss")
 
     trainer = pl.Trainer(
       max_epochs = 100,
-      accelerator = "gpu", precision = "16-mixed", 
+      log_every_n_steps = 10, # The default is 50, but there are less training batches
+      # than 50
+      accelerator = "gpu", devices = "auto", precision = "16-mixed", 
       callbacks = [callback_earlystop, callback_pruner],
       logger = True,
       enable_progress_bar = False,
@@ -103,7 +100,8 @@ def objective_nn(trial):
     
     # Save best epoch's validation loss to CV scores list
     cv_scores.append(trainer.callback_metrics["val_loss"].item())
-    
+  
+  # Return avg. CV score of configuration  
   return np.mean(cv_scores)
 
 
