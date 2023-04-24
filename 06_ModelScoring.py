@@ -39,7 +39,7 @@ pl.seed_everything(1923, workers = True)
 # Compute class weight
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
-class_weight_tensor = torch.tensor(class_weight[1], dtype = torch.float32)
+class_weight_tensor = torch.tensor((class_weight[1] / class_weight[0]), dtype = torch.float32)
 sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 
@@ -115,7 +115,7 @@ pipe_xgb = Pipeline(steps = [
 
 
 # Define NN model with best parameters
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn2.csv").iloc[0,]
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn3.csv").iloc[0,]
 hyperparams_dict = {
       "input_size": 88,
       "n_hidden_layers": best_trial_nn["params_n_hidden_layers"],
@@ -169,7 +169,7 @@ for key in models_dict.keys():
       
     # Create trainer
     trainer = pl.Trainer(
-      max_epochs = 32,
+      max_epochs = 8,
       log_every_n_steps = 10, # The default is 50, but there are less training batches
       # than 50
       accelerator = "gpu", devices = "auto", precision = "16-mixed", 
