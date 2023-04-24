@@ -116,7 +116,7 @@ study_logistic.optimize(
 
 # Retrieve and export trials
 trials_logistic = study_logistic.trials_dataframe().sort_values("value", ascending = True)
-trials_logistic.to_csv("./ModifiedData/trials_logistic.csv", index = False)
+trials_logistic.to_csv("./ModifiedData/trials_logisticX.csv", index = False)
 
 
 # Import best trial

@@ -12,18 +12,11 @@ import lightning.pytorch as pl
 from optuna.integration.pytorch_lightning import PyTorchLightningPruningCallback
 
 
-# Create copy of Optuna callback with lightning.pytorch namespace as a workaround,
-# as Optuna code uses pytorch_lightning namespace
-class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-# Define Dataset class: Takes in preprocessed features & targets
-class TorchDataset(torch.utils.data.Dataset):
+# Define TrainDataset class: Takes in preprocessed features & targets
+class TrainDataset(torch.utils.data.Dataset):
   
   # Store preprocessed features & targets
-  def __init__(self, x_train, y_train):
+  def __init__(self, x_train, y_train): 
     self.x = torch.tensor(x_train, dtype = torch.float32) # Store features
     self.y = torch.tensor(y_train.values, dtype = torch.float32).unsqueeze(1) # Store targets
   
@@ -34,6 +27,23 @@ class TorchDataset(torch.utils.data.Dataset):
   # Return a pair of features & target
   def __getitem__(self, idx):
     return self.x[idx], self.y[idx]
+
+
+# Define TestDataset class: Takes in preprocessed features only
+class TestDataset(torch.utils.data.Dataset):
+  
+  # Store preprocessed features 
+  def __init__(self, x_test): 
+    self.x = torch.tensor(x_test, dtype = torch.float32) # Store features
+  
+  # Return data length  
+  def __len__(self):
+    return len(self.x) 
+  
+  # Return one set of features
+  def __getitem__(self, idx):
+    return self.x[idx]
+
  
 
 # Define Lightning module
@@ -81,6 +91,9 @@ class SeluDropoutModel(pl.LightningModule):
       
     # Full network
     self.network = torch.nn.Sequential(*self.layers_list)
+    
+    # Sigmoid activation for prediction step only, not part of forward propagation
+    self.sigmoid = torch.nn.Sequential(torch.nn.Sigmoid())
       
     # Initialize weights
     for layer in self.network:
@@ -120,11 +133,14 @@ class SeluDropoutModel(pl.LightningModule):
     return loss
   
   # Define prediction method (because the default just runs forward(), which
-  # doesn't have sigmoid activation without the loss function)
+  # doesn't have sigmoid activation)
   def predict_step(self, batch, batch_idx):
     
     # Run the forward propagation, apply sigmoid activation
-    return torch.nn.Sigmoid(self.network(x.view(x.size(0), -1)))
+    x = batch 
+    output = self.forward(x)
+    pred = self.sigmoid(output)
+    return pred
     
   # Define optimization algorithm, LR scheduler
   def configure_optimizers(self):
@@ -149,3 +165,9 @@ class SeluDropoutModel(pl.LightningModule):
       }
     }
 
+
+# Create copy of Optuna callback with lightning.pytorch namespace as a workaround,
+# as Optuna code uses pytorch_lightning namespace
+class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)

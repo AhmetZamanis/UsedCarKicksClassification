@@ -18,6 +18,9 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.kernel_approximation import RBFSampler
 from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
+import torch
+import lightning.pytorch as pl
+from XX_LightningClasses import TrainDataset, TestDataset, SeluDropoutModel
 
 
 # Set plotting options
@@ -27,9 +30,16 @@ plt.rcParams["figure.autolayout"] = True
 sns.set_style("darkgrid")
 
 
+# Set Torch settings
+torch.set_default_dtype(torch.float32)
+torch.set_float32_matmul_precision('high')
+pl.seed_everything(1923, workers = True)
+
+
 # Compute class weight
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
+class_weight_tensor = torch.tensor(class_weight[1], dtype = torch.float32)
 sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 
@@ -104,17 +114,31 @@ pipe_xgb = Pipeline(steps = [
 ])
 
 
+# Define NN model with best parameters
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn2.csv").iloc[0,]
+hyperparams_dict = {
+      "input_size": 88,
+      "n_hidden_layers": best_trial_nn["params_n_hidden_layers"],
+      "hidden_size": best_trial_nn["params_hidden_size"],
+      "learning_rate": best_trial_nn["params_learning_rate"],
+      "l2": best_trial_nn["params_l2"],
+      "dropout": best_trial_nn["params_dropout"],
+      "class_weight": class_weight_tensor
+    }
+model_nn = SeluDropoutModel(hyperparams_dict)
+
+
 # Make dict of models
 models_dict = {
   "Dummy": model_dummy,
   "Logistic": pipe_logistic,
   "SVM": pipe_svm,
-  "XGBoost": pipe_xgb
+  "XGBoost": pipe_xgb,
+  "Neural net": model_nn
 }
 
 
 # Train, predict & score each model
-preds_class = {}
 preds_prob = {}
 scores_avg_precision = {}
 scores_brier = {}
@@ -127,21 +151,53 @@ for key in models_dict.keys():
   # Fit model
   if key == "Dummy":
     model.fit(x_train, y_train)
+  
+  elif key == "Neural net":
     
+    # Apply scikit preprocessing pipeline
+    x_tr = pipe_process.fit_transform(x_train, y_train)
+    x_test1 = pipe_process.transform(x_test)
+    
+    # Create train & test Datasets, dataloaders
+    train_data = TrainDataset(x_tr, y_train)
+    test_data = TestDataset(x_test1)
+    
+    train_loader = torch.utils.data.DataLoader(
+      train_data, batch_size = 1024, num_workers = 0, shuffle = True)
+    test_loader = torch.utils.data.DataLoader(
+      test_data, batch_size = len(test_data), num_workers = 0, shuffle = False)
+      
+    # Create trainer
+    trainer = pl.Trainer(
+      max_epochs = 32,
+      log_every_n_steps = 10, # The default is 50, but there are less training batches
+      # than 50
+      accelerator = "gpu", devices = "auto", precision = "16-mixed", 
+      logger = True,
+      enable_progress_bar = True,
+      enable_checkpointing = True
+    )
+    
+    # Train model
+    trainer.fit(model, train_loader)
+
   else:
     
     # Create unique sample weights argument for pipeline.fit
     kwargs = {model.steps[-1][0] + "__sample_weight": sample_weight_train}
+    
+    # Fit pipeline
     model.fit(x_train, y_train, **kwargs)
   
-  # Predict class
-  y_pred = model.predict(x_test)
-  preds_class[key] = y_pred
-  
   # Predict positive class prob
-  y_prob = model.predict_proba(x_test)
-  y_prob = np.array([x[1] for x in y_prob])
-  preds_prob[key] = y_prob
+  if key == "Neural net":
+    y_prob = trainer.predict(model_nn, test_loader)
+    preds_prob[key] = np.float32(y_prob[0].numpy().reshape(1, -1)[0])
+  
+  else:  
+    y_prob = model.predict_proba(x_test)
+    y_prob = np.array([x[1] for x in y_prob])
+    preds_prob[key] = y_prob
   
   # Retrieve average precision scores
   avg_precision = average_precision_score(y_test, preds_prob[key])
@@ -252,6 +308,20 @@ df_f1_xgb = pd.DataFrame(
   id_vars = "Threshold prob."
   )
 
+# NN
+df_f1_nn = pd.DataFrame(
+  {"F1 score": scores_f1["Neural net"][:-1],
+   "Precision": scores_precision["Neural net"][:-1],
+   "Recall": scores_recall["Neural net"][:-1],
+   "Threshold prob.": threshold_probs["Neural net"]
+  }
+).melt(
+  value_vars = ["F1 score", "Precision", "Recall"], 
+  var_name = "Metric",
+  value_name = "Score",
+  id_vars = "Threshold prob."
+  )
+
 
 # Get dataframes for stacked histogram plots
 
@@ -273,6 +343,12 @@ df_preds_xgb = pd.DataFrame({
   "Actual labels": y_test,
 })
 
+# XGBoost
+df_preds_nn = pd.DataFrame({
+  "Prob. predictions": preds_prob["Neural net"],
+  "Actual labels": y_test,
+})
+
 
 # Plot precision-recall curves
 fig, ax = plt.subplots()
@@ -286,7 +362,7 @@ plt.close("all")
 
 
 # Plot F1 score - threshold prob. plots
-fig, ax = plt.subplots(3, sharex = True, sharey= True)
+fig, ax = plt.subplots(4, sharex = True, sharey = True)
 _ = fig.suptitle("F1 - precision - recall scores across threshold probabilities")
 
 # Logistic
@@ -310,13 +386,20 @@ _ = sns.lineplot(
   data = df_f1_xgb, legend = False)
 _ = ax[2].set_title("XGBoost")
 
+# NN
+_ = sns.lineplot(
+  ax = ax[3], 
+  x = "Threshold prob.", y = "Score", hue = "Metric", 
+  data = df_f1_nn, legend = False)
+_ = ax[3].set_title("Neural net")
+
 plt.show()
 plt.savefig("./Plots/f1.png", dpi = 300)
 plt.close("all")
 
 
 # Plot predicted probability distributions of classifiers
-fig, ax = plt.subplots(3, sharex = True, sharey= True)
+fig, ax = plt.subplots(4, sharex = True, sharey = True)
 _ = fig.suptitle("Distributions of positive class probability predictions")
 
 # Logistic
@@ -349,8 +432,19 @@ _ = sns.histplot(
   data = df_preds_xgb,
   legend = False)
 _ = ax[2].set_title("XGBoost")
-_ = ax[2].set_xlabel("Probability predictions for positive class")
 _ = ax[2].set_ylabel("N. of times predicted")
+
+# NN
+_ = sns.histplot(
+  ax = ax[3], 
+  x = "Prob. predictions",
+  hue = "Actual labels",
+  multiple = "stack",
+  data = df_preds_nn,
+  legend = False)
+_ = ax[3].set_title("Neural net")
+_ = ax[3].set_xlabel("Probability predictions for positive class")
+_ = ax[3].set_ylabel("N. of times predicted")
 
 plt.show()
 plt.savefig("./Plots/prob_dist.png", dpi = 300)

@@ -138,7 +138,7 @@ trials_svm.to_csv("./ModifiedData/trials_svm.csv", index = False)
 
 
 # Import best trial
-best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
+best_trial_svm = pd.read_csv("./ModifiedData/trials_svmX.csv").iloc[0,]
 
 
 # Retrieve best early stop rounds with optimal parameters for each CV fold
