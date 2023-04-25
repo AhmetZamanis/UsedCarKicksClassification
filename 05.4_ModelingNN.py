@@ -9,7 +9,7 @@ exec(open("04_Preprocessing.py").read())
 
 
 import optuna
-import torch
+import torch, torchvision, torchmetrics
 import lightning.pytorch as pl
 from sklearn.utils.class_weight import compute_class_weight
 from XX_LightningClasses import TrainDataset, SeluDropoutModel, OptunaPruning
@@ -32,12 +32,6 @@ x_train = pipe_process.fit_transform(x_train, y_train)
 x_val = pipe_process.transform(x_val)
 
 
-# Compute class weight
-classes = list(set(y_train))
-class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
-class_weight = torch.tensor((class_weight[1] / class_weight[0]), dtype = torch.float32)
-
-
 # Load data into TrainDataset
 train_data = TrainDataset(x_train, y_train)
 val_data = TrainDataset(x_val, y_val)
@@ -54,11 +48,13 @@ val_loader = torch.utils.data.DataLoader(
 def objective_nn(trial):
   
   # Define parameter ranges to tune over & suggest param set for trial
-  n_hidden_layers = trial.suggest_int("n_hidden_layers", 2, 4)
-  hidden_size = trial.suggest_int("hidden_size", 2, 32, step = 2)
-  learning_rate = trial.suggest_float("learning_rate", 1e-3, 5e-2)
-  l2 = trial.suggest_float("l2", 1e-4, 1e-2, log = True)
-  dropout = trial.suggest_float("dropout", 1e-3, 0.01)
+  n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 4)
+  hidden_size = trial.suggest_int("hidden_size", 2, 88, step = 2)
+  learning_rate = trial.suggest_float("learning_rate", 5e-4, 5e-2)
+  l2 = trial.suggest_float("l2", 5e-4, 1e-2, log = True)
+  dropout = trial.suggest_float("dropout", 1e-3, 0.1)
+  loss_alpha = trial.suggest_float("loss_alpha", 0, 1, step = 0.1)
+  loss_gamma = trial.suggest_float("loss_gamma", 0, 4, step = 0.25)
   
   # Create hyperparameters dict
   hyperparams_dict = {
@@ -68,16 +64,17 @@ def objective_nn(trial):
       "learning_rate": learning_rate,
       "l2": l2,
       "dropout": dropout,
-      "class_weight": class_weight
+      "loss_alpha": loss_alpha,
+      "loss_gamma": loss_gamma
     }
     
   # Create trainer & callbacks
   callback_earlystop = pl.callbacks.EarlyStopping(
-      monitor = "val_loss",
+      monitor = "val_avg_precision", mode = "max",
       min_delta = 1e-4,
       patience = 10)
       
-  callback_pruner = OptunaPruning(trial, monitor = "val_loss")
+  callback_pruner = OptunaPruning(trial, monitor = "val_avg_precision")
 
   trainer = pl.Trainer(
       max_epochs = 100,
@@ -94,8 +91,8 @@ def objective_nn(trial):
   model = SeluDropoutModel(hyperparams_dict)
   trainer.fit(model, train_loader, val_loader)
     
-  # Return best epoch's validation loss
-  return trainer.callback_metrics["val_loss"].item()
+  # Return best epoch's validation average precision
+  return trainer.callback_metrics["val_avg_precision"].item()
 
 
 # Create study
@@ -103,24 +100,24 @@ study_nn = optuna.create_study(
   sampler = optuna.samplers.TPESampler(seed = 1923),
   pruner = optuna.pruners.HyperbandPruner(),
   study_name = "tune_nn",
-  direction = "minimize"
+  direction = "maximize"
 )
 
 
 # Optimize study
 study_nn.optimize(
   objective_nn, 
-  n_trials = 250, 
+  n_trials = 500, 
   show_progress_bar = True)
 
 
 # Retrieve and export trials
-trials_nn = study_nn.trials_dataframe().sort_values("value", ascending = True)
-trials_nn.to_csv("./ModifiedData/trials_nnX.csv", index = False)
+trials_nn = study_nn.trials_dataframe().sort_values("value", ascending = False)
+trials_nn.to_csv("./ModifiedData/trials_nn2.csv", index = False)
 
 
 # Import best trial
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn3.csv").iloc[0,]
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn2.csv").iloc[0,]
 
 
 # Train & save NN model with best params, get best epoch
@@ -132,18 +129,19 @@ hyperparams_dict = {
       "learning_rate": best_trial_nn["params_learning_rate"],
       "l2": best_trial_nn["params_l2"],
       "dropout": best_trial_nn["params_dropout"],
-      "class_weight": class_weight
+      "loss_alpha": best_trial_nn["params_loss_alpha"],
+      "loss_gamma": best_trial_nn["params_loss_gamma"]
     }
     
 # Create trainer & callbacks
 callback_earlystop = pl.callbacks.EarlyStopping(
-      monitor = "val_loss",
+      monitor = "val_avg_precision", mode = "max",
       min_delta = 1e-4,
       patience = 10)
 
 callback_checkpoint = pl.callbacks.ModelCheckpoint(
-  monitor = "val_loss", save_last = True, save_top_k = 1,
-  filename = "{epoch}-{val_loss:.4f}")
+  monitor = "val_avg_precision", save_last = True, save_top_k = 1, mode = "max",
+  filename = "{epoch}-{val_avg_precision:.4f}")
       
 trainer = pl.Trainer(
       max_epochs = 100,
@@ -160,5 +158,5 @@ trainer = pl.Trainer(
 model = SeluDropoutModel(hyperparams_dict)
 trainer.fit(model, train_loader, val_loader)
 
-# Best epochs: 8
+# Best epoch: 17
 trainer.checkpoint_callback.best_model_path

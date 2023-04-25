@@ -18,7 +18,7 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.kernel_approximation import RBFSampler
 from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
-import torch
+import torch, torchvision
 import lightning.pytorch as pl
 from XX_LightningClasses import TrainDataset, TestDataset, SeluDropoutModel
 
@@ -39,7 +39,6 @@ pl.seed_everything(1923, workers = True)
 # Compute class weight
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
-class_weight_tensor = torch.tensor((class_weight[1] / class_weight[0]), dtype = torch.float32)
 sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 
@@ -115,7 +114,7 @@ pipe_xgb = Pipeline(steps = [
 
 
 # Define NN model with best parameters
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn3.csv").iloc[0,]
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn2.csv").iloc[0,]
 hyperparams_dict = {
       "input_size": 88,
       "n_hidden_layers": best_trial_nn["params_n_hidden_layers"],
@@ -123,7 +122,8 @@ hyperparams_dict = {
       "learning_rate": best_trial_nn["params_learning_rate"],
       "l2": best_trial_nn["params_l2"],
       "dropout": best_trial_nn["params_dropout"],
-      "class_weight": class_weight_tensor
+      "loss_alpha": best_trial_nn["params_loss_alpha"],
+      "loss_gamma": best_trial_nn["params_loss_gamma"]
     }
 model_nn = SeluDropoutModel(hyperparams_dict)
 
@@ -142,6 +142,7 @@ models_dict = {
 preds_prob = {}
 scores_avg_precision = {}
 scores_brier = {}
+scores_brier_weighted = {}
 
 for key in models_dict.keys():
   
@@ -169,7 +170,7 @@ for key in models_dict.keys():
       
     # Create trainer
     trainer = pl.Trainer(
-      max_epochs = 8, # Best epoch from ModelingNN
+      max_epochs = 17, # Best epoch from ModelingNN
       log_every_n_steps = 10, # The default is 50, but there are less training batches
       # than 50
       accelerator = "gpu", devices = "auto", precision = "16-mixed", 
@@ -206,18 +207,25 @@ for key in models_dict.keys():
   scores_avg_precision[key] = avg_precision
   
   # Retrieve Brier scores
-  brier_score = brier_score_loss(
-    y_test, preds_prob[key], sample_weight = sample_weight_test)
+  brier_score = brier_score_loss(y_test, preds_prob[key])
   scores_brier[key] = brier_score
+  
+  brier_score_weighted = brier_score_loss(
+    y_test, preds_prob[key], sample_weight = sample_weight_test)
+  scores_brier_weighted[key] = brier_score_weighted
 
 
 # Retrieve Brier skill scores for each model, with dummy classifier as reference
 scores_brier_skill = {}
+scores_brier_skill_weighted = {}
 
 for key in models_dict.keys():
   
   brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
   scores_brier_skill[key] = brier_skill
+  
+  brier_skill_weighted = 1 - (scores_brier_weighted[key] / scores_brier_weighted["Dummy"])
+  scores_brier_skill_weighted[key] = brier_skill_weighted
 
 
 # Retrieve F1 scores at different thresholds
@@ -257,8 +265,10 @@ for key in models_dict.keys():
 df_scores = pd.DataFrame(
   {
   "Avg. precision (PRAUC)": scores_avg_precision.values(),
-  "Brier score": scores_brier.values(),
-  "Brier skill scores": scores_brier_skill.values(),
+  "Brier score (class weighted)": scores_brier_weighted.values(),
+  "Brier skill score (class weighted)": scores_brier_skill_weighted.values(),
+  "Brier score (unweighted)": scores_brier.values(),
+  "Brier skill score (unweighted)": scores_brier_skill.values(),
   "Best F1 score": scores_f1_best.values(),
   "Precision at best F1": scores_precision_best.values(),
   "Recall at best F1": scores_recall_best.values(),

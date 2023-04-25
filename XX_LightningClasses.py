@@ -4,7 +4,7 @@
 # https://www.kaggle.com/competitions/DontGetKicked/overview
 
 
-import torch
+import torch, torchvision, torchmetrics
 import lightning.pytorch as pl
 
 # Careful: Optuna still uses "pytorch_lightning" to import the Pruning integration
@@ -45,7 +45,7 @@ class TestDataset(torch.utils.data.Dataset):
     return self.x[idx]
 
  
-# Define Lightning module
+# Define Lightning module with Focal loss
 class SeluDropoutModel(pl.LightningModule):
   
   # Initialize model
@@ -55,6 +55,11 @@ class SeluDropoutModel(pl.LightningModule):
     super().__init__() 
     self.save_hyperparameters(logger = False) # Save external hyperparameters so
     # they are available when loading saved models
+    
+    # Initialize validation average precision metric (since focal loss has tunable
+    # hyperparameters, using it for validation would be leakage)
+    self.val_avg_precision = torchmetrics.classification.AveragePrecision(
+      task = "binary")
   
     # Define hyperparameters
     self.n_hidden_layers = hyperparams_dict["n_hidden_layers"]
@@ -63,7 +68,8 @@ class SeluDropoutModel(pl.LightningModule):
     self.learning_rate = hyperparams_dict["learning_rate"]
     self.l2 = hyperparams_dict["l2"]
     self.dropout = hyperparams_dict["dropout"]
-    self.class_weight = hyperparams_dict["class_weight"]
+    self.loss_alpha = hyperparams_dict["loss_alpha"]
+    self.loss_gamma = hyperparams_dict["loss_gamma"]
     
     # Define architecture 
     # Initialize layers list with first hidden layer
@@ -110,26 +116,34 @@ class SeluDropoutModel(pl.LightningModule):
     # Perform training, calculate log & return loss
     x, y = batch
     output = self.forward(x)
-    loss = torch.nn.functional.binary_cross_entropy_with_logits(
-      output, y, pos_weight = self.class_weight) # Loss function applies sigmoid
-      # activation before calculating loss
+    
+    # Loss function applies sigmoid activation before calculating focal loss
+    loss = torchvision.ops.sigmoid_focal_loss(
+      output, y, 
+      alpha = self.loss_alpha, gamma = self.loss_gamma, 
+      reduction = "mean") 
+    
     self.log(
       "train_loss", loss, 
       on_step = False, on_epoch = True, prog_bar = True, logger = True)
+      
     return loss
   
   # Define validation loop
   def validation_step(self, batch, batch_idx):
     
-    # Perform validation, calculate log & return loss
+    # Make predictions
     x, y = batch
     output = self.forward(x)
-    loss = torch.nn.functional.binary_cross_entropy_with_logits(
-      output, y, pos_weight = self.class_weight)
+    pred = self.sigmoid(output)
+    
+    # Update & log avg. precision score
+    self.val_avg_precision(pred, torch.tensor(y, dtype = torch.int32))
     self.log(
-      "val_loss", loss, 
-      on_step = False, on_epoch = True, prog_bar = True, logger = True)
-    return loss
+      "val_avg_precision", self.val_avg_precision, 
+      on_step = True, on_epoch = True, prog_bar = True, logger = True)
+      
+    return self.val_avg_precision
   
   # Define prediction method (because the default just runs forward(), which
   # doesn't have sigmoid activation and doesn't return probabilities)
