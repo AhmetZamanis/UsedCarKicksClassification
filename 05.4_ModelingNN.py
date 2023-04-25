@@ -54,11 +54,11 @@ val_loader = torch.utils.data.DataLoader(
 def objective_nn(trial):
   
   # Define parameter ranges to tune over & suggest param set for trial
-  n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 3)
-  hidden_size = trial.suggest_int("hidden_size", 2, 64, step = 2)
-  learning_rate = trial.suggest_float("learning_rate", 5e-4, 5e-2)
+  n_hidden_layers = trial.suggest_int("n_hidden_layers", 2, 4)
+  hidden_size = trial.suggest_int("hidden_size", 2, 32, step = 2)
+  learning_rate = trial.suggest_float("learning_rate", 1e-3, 5e-2)
   l2 = trial.suggest_float("l2", 1e-4, 1e-2, log = True)
-  dropout = trial.suggest_float("dropout", 5e-4, 0.1)
+  dropout = trial.suggest_float("dropout", 1e-3, 0.01)
   
   # Create hyperparameters dict
   hyperparams_dict = {
@@ -110,21 +110,20 @@ study_nn = optuna.create_study(
 # Optimize study
 study_nn.optimize(
   objective_nn, 
-  n_trials = 500, 
+  n_trials = 250, 
   show_progress_bar = True)
 
 
 # Retrieve and export trials
 trials_nn = study_nn.trials_dataframe().sort_values("value", ascending = True)
-trials_nn.to_csv("./ModifiedData/trials_nn4.csv", index = False)
+trials_nn.to_csv("./ModifiedData/trials_nnX.csv", index = False)
 
 
 # Import best trial
 best_trial_nn = pd.read_csv("./ModifiedData/trials_nn3.csv").iloc[0,]
 
 
-# Train & save NN model with best params, get best n. of epochs
-
+# Train & save NN model with best params, get best epoch
 # Define best hyperparameters
 hyperparams_dict = {
       "input_size": 88,
@@ -161,5 +160,5 @@ trainer = pl.Trainer(
 model = SeluDropoutModel(hyperparams_dict)
 trainer.fit(model, train_loader, val_loader)
 
-# Best epoch: 8
+# Best epochs: 8
 trainer.checkpoint_callback.best_model_path

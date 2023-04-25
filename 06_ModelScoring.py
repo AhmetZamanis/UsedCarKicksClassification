@@ -44,7 +44,7 @@ sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 
 
-# Create dummy classifier
+# Create dummy classifier which predicts the class probabilities
 model_dummy = DummyClassifier(strategy = "prior")
 
 
@@ -169,7 +169,7 @@ for key in models_dict.keys():
       
     # Create trainer
     trainer = pl.Trainer(
-      max_epochs = 8,
+      max_epochs = 8, # Best epoch from ModelingNN
       log_every_n_steps = 10, # The default is 50, but there are less training batches
       # than 50
       accelerator = "gpu", devices = "auto", precision = "16-mixed", 
@@ -192,6 +192,8 @@ for key in models_dict.keys():
   # Predict positive class prob
   if key == "Neural net":
     y_prob = trainer.predict(model_nn, test_loader)
+    
+    # Convert a list of float16 Torch tensors to single float32 np.array
     preds_prob[key] = np.float32(y_prob[0].numpy().reshape(1, -1)[0])
   
   else:  
@@ -203,7 +205,7 @@ for key in models_dict.keys():
   avg_precision = average_precision_score(y_test, preds_prob[key])
   scores_avg_precision[key] = avg_precision
   
-  # Retrieve Brier scores (Dummy classifier throws error with sample_weight)
+  # Retrieve Brier scores
   brier_score = brier_score_loss(
     y_test, preds_prob[key], sample_weight = sample_weight_test)
   scores_brier[key] = brier_score
@@ -233,9 +235,11 @@ threshold_probs_best = {}
 
 for key in models_dict.keys():
   
+  # Retrieve the precision & recall pairs at various thresholds, calculate F1
+  # scores from them
   precision, recall, thresholds = precision_recall_curve(y_test, preds_prob[key])
   f1_scores = 2 * recall * precision / (recall + precision)
-
+    
   scores_f1[key] = f1_scores
   scores_f1_best[key] = max(f1_scores)
   
@@ -265,10 +269,9 @@ df_scores.to_csv("./ModifiedData/scores.csv", index = True)
 
 
 # Get dataframes for F1 score - threshold prob plots
-
 # Logistic
 df_f1_logistic = pd.DataFrame(
-  {"F1 score": scores_f1["Logistic"][:-1],
+  {"F1 score": scores_f1["Logistic"][:-1], # N. scores = N. thresholds + 1
    "Precision": scores_precision["Logistic"][:-1],
    "Recall": scores_recall["Logistic"][:-1],
    "Threshold prob.": threshold_probs["Logistic"]
@@ -324,7 +327,6 @@ df_f1_nn = pd.DataFrame(
 
 
 # Get dataframes for stacked histogram plots
-
 # Logistic
 df_preds_logistic = pd.DataFrame({
   "Prob. predictions": preds_prob["Logistic"],
@@ -343,7 +345,7 @@ df_preds_xgb = pd.DataFrame({
   "Actual labels": y_test,
 })
 
-# XGBoost
+# NN
 df_preds_nn = pd.DataFrame({
   "Prob. predictions": preds_prob["Neural net"],
   "Actual labels": y_test,
