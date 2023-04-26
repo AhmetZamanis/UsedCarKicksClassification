@@ -1,4 +1,33 @@
 
+
+# Debug target encoder missing values
+for i, (train_index, val_index) in enumerate(cv_indices):
+  print(i)
+  print(train_index)
+  print(val_index)
+  print("\n")
+
+
+
+for i, (train_index, val_index) in enumerate(cv_indices):
+  
+    # Split training-validation data
+    x_tr = x_train.iloc[train_index, ]
+    y_tr = y_train.iloc[train_index, ]
+    x_val = x_train.iloc[val_index, ]
+    y_val = y_train.iloc[val_index, ]
+    
+    # Perform preprocessing
+    x_tr = pipe_process.fit_transform(x_tr, y_tr)
+    x_val = pipe_process.transform(x_val)
+    
+    # Return n. of missing values
+    print(np.isnan(x_tr).sum())
+    print(np.isnan(x_val).sum())
+    print("\n")
+
+
+
 # Debug SGD partial fit
 
 # t_ does properly update after each epoch, and is reset with each validation fold.

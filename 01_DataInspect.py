@@ -77,6 +77,9 @@ df["Trim"].value_counts()
 # 864 submodels, many with only 1 observation. 8 missing values.
 df["SubModel"].value_counts() 
 
+# 2718 unique model & submodel combinations, many with only 1 observation.
+(df["Model"] + " " + df["SubModel"]).value_counts()
+
 
 # 3000+ unique cars in dataset (some could be different spellings of same car)
 (df["Model"] + df["Trim"] + df["SubModel"]).value_counts()

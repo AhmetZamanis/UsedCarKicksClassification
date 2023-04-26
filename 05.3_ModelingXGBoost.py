@@ -18,7 +18,7 @@ from sklearn.utils.class_weight import compute_class_weight
 is_available()
 
 
-# Get train-test indices (10 pairs)
+# Get train-test indices (3 pairs)
 cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
@@ -26,14 +26,14 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 def objective_xgb(trial):
   
   # Suggest parameter values from parameter ranges to tune over
-  learning_rate = trial.suggest_float("learning_rate", 0.05, 0.3, step = 0.05)
-  max_depth = trial.suggest_int("max_depth", 2, 20, step = 2)
+  learning_rate = trial.suggest_float("learning_rate", 0.05, 0.3)
+  max_depth = trial.suggest_int("max_depth", 2, 20)
   min_child_weight = trial.suggest_int("min_child_weight", 1, 20, log = True)
   gamma = trial.suggest_float("gamma", 0.01, 0.5, log = True)
-  reg_alpha = trial.suggest_float("l1_reg", 0.05, 1, log = True)
-  reg_lambda = trial.suggest_float("l2_reg", 0.05, 2, log = True)
-  subsample = trial.suggest_float("subsample", 0.5, 1, step = 0.1)
-  colsample_bytree = trial.suggest_float("colsample_bytree", 0.5, 1, step = 0.1)
+  reg_alpha = trial.suggest_float("l1_reg", 0.01, 1, log = True)
+  reg_lambda = trial.suggest_float("l2_reg", 0.05, 2)
+  subsample = trial.suggest_float("subsample", 0.5, 1)
+  colsample_bytree = trial.suggest_float("colsample_bytree", 0.5, 1)
   
   # Crossvalidate the parameter set
   cv_scores = []
@@ -130,18 +130,20 @@ study_xgb = optuna.create_study(
 # Optimize study
 study_xgb.optimize(
   objective_xgb, 
-  n_trials = 500,
+  n_trials = 1000,
   n_jobs = 1,
   show_progress_bar = True)
 
 
 # Retrieve and export trials
 trials_xgb = study_xgb.trials_dataframe().sort_values("value", ascending = True)
-trials_xgb.to_csv("./ModifiedData/trials_xgb.csv", index = False)
+trials_xgb.to_csv("./ModifiedData/trials_xgb2.csv", index = False)
 
 
 # Import best trial
-best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
+best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb2.csv")
+best_trial_xgb = best_trial_xgb.loc[
+  best_trial_xgb["state"] == "COMPLETE"].iloc[0,]
 
 
 # Retrieve best early stop rounds with optimal parameters for each CV fold
@@ -195,5 +197,5 @@ for i, (train_index, val_index) in enumerate(cv_indices):
     best_iterations.append(model_xgb.best_iteration + 1)
 
 
-# Retrieve median of best n_estimators: 29 rounds
+# Retrieve median of best n_estimators: 18 rounds
 int(np.median(best_iterations))

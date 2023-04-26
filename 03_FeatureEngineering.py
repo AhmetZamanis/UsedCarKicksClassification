@@ -12,7 +12,7 @@ from feature_engine.encoding import OneHotEncoder
 from feature_engine.creation import CyclicalFeatures
 
 
-# Time features from date: Purchase year, month, day of week?
+# Time features from date: Purchase year, month, day of week
 df["PurchaseYear"] = df["PurchDate"].dt.year
 df["PurchaseMonth"] = df["PurchDate"].dt.month
 df["PurchaseDay"] = df["PurchDate"].dt.weekday
@@ -36,6 +36,7 @@ df["FWD"] = df["Model"].str.contains("FWD").astype(int)
 df["RWD"] = df["Model"].str.contains("RWD").astype(int)
 
 # Chassis types from SubModel: WAGON, SEDAN, COUPE, HATCHBACK, CONVERTIBLE
+# Work out and recode these features manually if SubModel is missing
 df.loc[pd.isnull(df["SubModel"]), "Model"]
 
 df["ChassisWagon"] = df["SubModel"].str.contains("WAGON")
@@ -71,8 +72,16 @@ df["FourDoors"] = df["FourDoors"].astype(int)
 # too many NAs. If dummies, would add too many columns.
 
 
-# Drop model, trim, submodel
-df = df.drop(["Model", "Trim", "SubModel"], axis = 1)
+# Recode SubModel NAs into empty string
+df.loc[pd.isnull(df["SubModel"]), "SubModel"] = ""
+
+
+# Combine Model & SubModel
+df["ModelSubModel"] = df["Model"] + " " + df["SubModel"]
+
+
+# Drop trim, submodel
+df = df.drop(["Trim", "SubModel"], axis = 1)
 
 
 # Miles per year: VehOdo / VehicleAge

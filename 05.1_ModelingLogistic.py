@@ -14,7 +14,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import log_loss
 
 
-# Get train-test indices (10 pairs)
+# Get train-test indices (3 pairs)
 cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
@@ -22,7 +22,7 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 def objective_logistic(trial):
   
   # Define parameter ranges to tune over
-  alpha = trial.suggest_float("reg_strength", 0.0001, 0.5, log = True)
+  alpha = trial.suggest_float("reg_strength", 5e-5, 0.5, log = True)
   l1_ratio = trial.suggest_float("l1_ratio", 0, 1)
 
   # Crossvalidate the parameter set
@@ -60,7 +60,7 @@ def objective_logistic(trial):
     # Perform epoch by epoch training with early stopping & pruning
     epoch_scores = []
     n_iter_no_change = 0
-    tol = 0.001
+    tol = 0.0001
     
     for epoch in range(100):
       
@@ -80,7 +80,7 @@ def objective_logistic(trial):
           raise optuna.TrialPruned()
       
       # Count epochs with no improvement after first 10 epochs
-      if epoch > 10:
+      if epoch > 9:
         if (epoch_score > min(epoch_scores) - tol):
           n_iter_no_change += 1
       
@@ -116,11 +116,14 @@ study_logistic.optimize(
 
 # Retrieve and export trials
 trials_logistic = study_logistic.trials_dataframe().sort_values("value", ascending = True)
-trials_logistic.to_csv("./ModifiedData/trials_logisticX.csv", index = False)
+trials_logistic.to_csv("./ModifiedData/trials_logistic.csv", index = False)
 
 
 # Import best trial
-best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
+best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv")
+best_trial_logistic = best_trial_logistic.loc[
+  best_trial_logistic["state"] == "COMPLETE"].iloc[0,]
+
 
 
 # Retrieve best early stop rounds with optimal parameters for each CV fold
@@ -157,7 +160,7 @@ for i, (train_index, val_index) in enumerate(cv_indices):
     # Perform epoch by epoch training with early stopping & pruning
     epoch_scores = []
     n_iter_no_change = 0
-    tol = 0.0001
+    tol = 1e-5
     
     for epoch in range(100):
       
@@ -169,7 +172,7 @@ for i, (train_index, val_index) in enumerate(cv_indices):
       epoch_score = log_loss(y_val, y_pred, sample_weight = sample_weight_val)
       
       # Count epochs with no improvement after first 10 epochs
-      if epoch > 10:
+      if epoch > 9:
         if (epoch_score > min(epoch_scores) - tol):
           n_iter_no_change += 1
       
@@ -185,6 +188,6 @@ for i, (train_index, val_index) in enumerate(cv_indices):
     best_iterations.append(epoch_scores.index(min(epoch_scores)) + 1)
 
 
-# Retrieve median of best n_estimators: 26 iters
+# Retrieve median of best n_estimators: 24 iters
 int(np.median(best_iterations))
 int(np.mean(best_iterations))

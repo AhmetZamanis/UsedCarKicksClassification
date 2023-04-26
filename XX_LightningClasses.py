@@ -138,7 +138,7 @@ class SeluDropoutModel(pl.LightningModule):
     pred = self.sigmoid(output)
     
     # Update & log avg. precision score
-    self.val_avg_precision(pred, torch.tensor(y, dtype = torch.int32))
+    self.val_avg_precision(pred, y.type(torch.int32))
     self.log(
       "val_avg_precision", self.val_avg_precision, 
       on_step = True, on_epoch = True, prog_bar = True, logger = True)
