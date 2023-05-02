@@ -141,7 +141,9 @@ trials_nn.to_csv("./ModifiedData/trials_nn1.csv", index = False)
 
 
 # Import best trial
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn1.csv").iloc[0,]
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn1.csv")
+best_trial_nn = best_trial_nn.loc[
+  best_trial_nn["state"] == "COMPLETE"].iloc[0,]
 
 
 # Train & save NN model with best params, get best epoch
@@ -149,7 +151,7 @@ best_trial_nn = pd.read_csv("./ModifiedData/trials_nn1.csv").iloc[0,]
 hyperparams_dict = {
       "input_size": 90,
       "n_hidden_layers": best_trial_nn["params_n_hidden_layers"],
-      "hidden_size": best_trial_nn["params_hidden_size"],
+      "hidden_size": 2 ** best_trial_nn["params_hidden_size"],
       "learning_rate": best_trial_nn["params_learning_rate"],
       "l2": best_trial_nn["params_l2"],
       "dropout": best_trial_nn["params_dropout"],
