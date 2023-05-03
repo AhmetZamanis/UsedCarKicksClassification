@@ -23,7 +23,7 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
 # Define model validation function
-def validate_xgb(params_dict, verbose = 0, optuna_trial = False, trial = None):
+def validate_xgb(params_dict, verbose = 0, trial = None):
   
   # Record best epoch scores for each CV fold
   cv_scores = []
@@ -50,7 +50,7 @@ def validate_xgb(params_dict, verbose = 0, optuna_trial = False, trial = None):
     x_val = pipe_process.transform(x_val)
     
     # Create pruning callback for first CV split if this is an Optuna trial
-    if (i == 0) and (optuna_trial == True): 
+    if (i == 0) and (trial is not None): 
       callback_pruner = [optuna.integration.XGBoostPruningCallback(
         trial, "validation_0-logloss")]
     
@@ -94,7 +94,7 @@ def validate_xgb(params_dict, verbose = 0, optuna_trial = False, trial = None):
     best_epochs.append(model_xgb.best_iteration + 1)
   
   # Return the average CV score for Optuna study
-  if optuna_trial == True:
+  if trial is not None:
     return np.mean(cv_scores)
   
   # Return best epoch numbers for epoch validation
@@ -129,7 +129,7 @@ def objective_xgb(trial):
   
   # Validate parameter set
   mean_cv_score = validate_xgb(
-    params_dict = params_dict, optuna_trial = True, trial = trial)
+    params_dict = params_dict, trial = trial)
   
   return mean_cv_score
 

@@ -113,7 +113,7 @@ class SeluDropoutModel(pl.LightningModule):
   # Define training loop
   def training_step(self, batch, batch_idx):
     
-    # Perform training, calculate log & return loss
+    # Perform training, calculate & return loss
     x, y = batch
     output = self.forward(x)
     
@@ -132,12 +132,12 @@ class SeluDropoutModel(pl.LightningModule):
   # Define validation loop
   def validation_step(self, batch, batch_idx):
     
-    # Make predictions
+    # Make predictions, apply sigmoid activation to get probabilities
     x, y = batch
     output = self.forward(x)
     pred = self.sigmoid(output)
     
-    # Update & log avg. precision score
+    # Update & log avg. precision score, ensure y is in int32 format for metric
     self.val_avg_precision(pred, y.type(torch.int32))
     self.log(
       "val_avg_precision", self.val_avg_precision, 
@@ -158,7 +158,7 @@ class SeluDropoutModel(pl.LightningModule):
   # Define optimization algorithm, LR scheduler
   def configure_optimizers(self):
     
-    # Optimizer with L2 regularization
+    # Adam optimizer with L2 regularization
     optimizer = torch.optim.Adam(
       self.parameters(), lr = self.learning_rate, weight_decay = self.l2)
     

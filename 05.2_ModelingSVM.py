@@ -24,7 +24,7 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
 # Define model validation function
-def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, optuna_trial = False, trial = None):
+def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
   
   # Record the CV scores of the parameter set
   cv_scores = []
@@ -90,7 +90,7 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, optuna_trial = False,
       epoch_score = hinge_loss(y_val, pred_decision, sample_weight = sample_weight_val)
       
       # For first CV fold, report intermediate score of trial to Optuna
-      if (i == 0) and (optuna_trial == True):
+      if (i == 0) and (trial is not None):
         trial.report(epoch_score, epoch)
       
         # Prune trial if necessary
@@ -109,7 +109,7 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, optuna_trial = False,
       epoch_scores.append(epoch_score)
       
       # Print epoch information if not Optuna trial
-      if optuna_trial == False:
+      if trial is None:
         print(
           "\nEpoch: " + str(epoch) + 
           "\nVal. score: " + str(epoch_score) + 
@@ -129,7 +129,7 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, optuna_trial = False,
     best_epochs.append(epoch_scores.index(min(epoch_scores)) + 1)
   
   # Return the average CV score for Optuna study
-  if optuna_trial == True:
+  if trial is not None:
     return np.mean(cv_scores)
   
   # Return best epoch numbers for epoch validation
@@ -146,7 +146,7 @@ def objective_svm(trial):
   
   # Validate the parameter set
   mean_cv_score = validate_svm(
-    alpha = alpha, l1_ratio = l1_ratio, optuna_trial = True, trial = trial)
+    alpha = alpha, l1_ratio = l1_ratio, trial = trial)
   
   return mean_cv_score
 
