@@ -18,7 +18,7 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.kernel_approximation import RBFSampler
 from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
-import torch
+import torch, torchvision
 import lightning.pytorch as pl
 from XX_LightningClasses import TrainDataset, TestDataset, SeluDropoutModel
 
@@ -39,12 +39,11 @@ pl.seed_everything(1923, workers = True)
 # Compute class weight
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
-class_weight_tensor = torch.tensor((class_weight[1] / class_weight[0]), dtype = torch.float32)
 sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 
 
-# Create dummy classifier which predicts the class probabilities
+# Create dummy classifier which predicts the prior class probabilities
 model_dummy = DummyClassifier(strategy = "prior")
 
 
@@ -58,6 +57,7 @@ pipe_logistic = Pipeline(steps = [
       alpha = best_trial_logistic["params_reg_strength"],
       l1_ratio = best_trial_logistic["params_l1_ratio"],
       max_iter = 26,
+      n_iter_no_change = 1000, # Ensure model doesn't early stop based on train loss
       verbose = 1,
       random_state = 1923
     )
@@ -80,7 +80,8 @@ pipe_svm = Pipeline(steps = [
       penalty = "elasticnet",
       alpha = best_trial_svm["params_reg_strength"],
       l1_ratio = best_trial_svm["params_l1_ratio"],
-      max_iter = 31,
+      max_iter = 13,
+      n_iter_no_change = 1000, # Ensure model doesn't early stop based on train loss
       verbose = 1,
       random_state = 1923
       )
@@ -95,7 +96,7 @@ pipe_xgb = Pipeline(steps = [
   ("preprocessing", pipe_process),
   ("XGBoost", XGBClassifier(
       objective = "binary:logistic",
-      n_estimators = 30,
+      n_estimators = 20,
       eval_metric = "logloss",
       tree_method = "gpu_hist",
       gpu_id = 0,
@@ -115,15 +116,16 @@ pipe_xgb = Pipeline(steps = [
 
 
 # Define NN model with best parameters
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn3.csv").iloc[0,]
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn.csv").iloc[0,]
 hyperparams_dict = {
-      "input_size": 88,
+      "input_size": 90,
       "n_hidden_layers": best_trial_nn["params_n_hidden_layers"],
-      "hidden_size": best_trial_nn["params_hidden_size"],
+      "hidden_size": 2 ** best_trial_nn["params_hidden_size"],
       "learning_rate": best_trial_nn["params_learning_rate"],
       "l2": best_trial_nn["params_l2"],
       "dropout": best_trial_nn["params_dropout"],
-      "class_weight": class_weight_tensor
+      "loss_alpha": best_trial_nn["params_loss_alpha"],
+      "loss_gamma": best_trial_nn["params_loss_gamma"]
     }
 model_nn = SeluDropoutModel(hyperparams_dict)
 
@@ -138,10 +140,8 @@ models_dict = {
 }
 
 
-# Train, predict & score each model
-preds_prob = {}
-scores_avg_precision = {}
-scores_brier = {}
+# Train & predict each model
+preds_dict = {}
 
 for key in models_dict.keys():
   
@@ -169,8 +169,8 @@ for key in models_dict.keys():
       
     # Create trainer
     trainer = pl.Trainer(
-      max_epochs = 8, # Best epoch from ModelingNN
-      log_every_n_steps = 10, # The default is 50, but there are less training batches
+      max_epochs = 9, # Best epoch from ModelingNN
+      log_every_n_steps = 5, # The default is 50, but there are less training batches
       # than 50
       accelerator = "gpu", devices = "auto", precision = "16-mixed", 
       logger = True,
@@ -194,31 +194,38 @@ for key in models_dict.keys():
     y_prob = trainer.predict(model_nn, test_loader)
     
     # Convert a list of float16 Torch tensors to single float32 np.array
-    preds_prob[key] = np.float32(y_prob[0].numpy().reshape(1, -1)[0])
+    preds_dict[key] = np.float32(y_prob[0].numpy().reshape(1, -1)[0])
   
   else:  
     y_prob = model.predict_proba(x_test)
     y_prob = np.array([x[1] for x in y_prob])
-    preds_prob[key] = y_prob
+    preds_dict[key] = y_prob
   
+
+# Retrieve AP & Brier scores (weighted) for each model
+scores_avg_precision = {}
+scores_brier = {}
+
+for key in preds_dict.keys():
+
   # Retrieve average precision scores
-  avg_precision = average_precision_score(y_test, preds_prob[key])
+  avg_precision = average_precision_score(y_test, preds_dict[key])
   scores_avg_precision[key] = avg_precision
   
   # Retrieve Brier scores
   brier_score = brier_score_loss(
-    y_test, preds_prob[key], sample_weight = sample_weight_test)
+    y_test, preds_dict[key], sample_weight = sample_weight_test)
   scores_brier[key] = brier_score
-
-
+  
+ 
 # Retrieve Brier skill scores for each model, with dummy classifier as reference
 scores_brier_skill = {}
 
-for key in models_dict.keys():
+for key in preds_dict.keys():
   
   brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
   scores_brier_skill[key] = brier_skill
-
+  
 
 # Retrieve F1 scores at different thresholds
 scores_f1 = {}
@@ -233,11 +240,11 @@ scores_recall_best = {}
 threshold_probs = {}
 threshold_probs_best = {}
 
-for key in models_dict.keys():
+for key in preds_dict.keys():
   
   # Retrieve the precision & recall pairs at various thresholds, calculate F1
   # scores from them
-  precision, recall, thresholds = precision_recall_curve(y_test, preds_prob[key])
+  precision, recall, thresholds = precision_recall_curve(y_test, preds_dict[key])
   f1_scores = 2 * recall * precision / (recall + precision)
     
   scores_f1[key] = f1_scores
@@ -257,13 +264,13 @@ for key in models_dict.keys():
 df_scores = pd.DataFrame(
   {
   "Avg. precision (PRAUC)": scores_avg_precision.values(),
-  "Brier score": scores_brier.values(),
-  "Brier skill scores": scores_brier_skill.values(),
+  "Brier score (class weighted)": scores_brier.values(),
+  "Brier skill score (class weighted)": scores_brier_skill.values(),
   "Best F1 score": scores_f1_best.values(),
   "Precision at best F1": scores_precision_best.values(),
   "Recall at best F1": scores_recall_best.values(),
   "Threshold prob. at best F1": threshold_probs_best.values()
-  }, index = models_dict.keys()
+  }, index = preds_dict.keys()
 )
 df_scores.to_csv("./ModifiedData/scores.csv", index = True)
 
@@ -329,33 +336,33 @@ df_f1_nn = pd.DataFrame(
 # Get dataframes for stacked histogram plots
 # Logistic
 df_preds_logistic = pd.DataFrame({
-  "Prob. predictions": preds_prob["Logistic"],
+  "Prob. predictions": preds_dict["Logistic"],
   "Actual labels": y_test,
 })
 
 # SVM
 df_preds_svm = pd.DataFrame({
-  "Prob. predictions": preds_prob["SVM"],
+  "Prob. predictions": preds_dict["SVM"],
   "Actual labels": y_test,
 })
 
 # XGBoost
 df_preds_xgb = pd.DataFrame({
-  "Prob. predictions": preds_prob["XGBoost"],
+  "Prob. predictions": preds_dict["XGBoost"],
   "Actual labels": y_test,
 })
 
 # NN
 df_preds_nn = pd.DataFrame({
-  "Prob. predictions": preds_prob["Neural net"],
+  "Prob. predictions": preds_dict["Neural net"],
   "Actual labels": y_test,
 })
 
 
 # Plot precision-recall curves
 fig, ax = plt.subplots()
-for key in preds_prob.keys():
-  _ = PrecisionRecallDisplay.from_predictions(y_test, preds_prob[key], name = key, ax = ax)
+for key in preds_dict.keys():
+  _ = PrecisionRecallDisplay.from_predictions(y_test, preds_dict[key], name = key, ax = ax)
 _ = plt.title("Precision-recall curves of classifiers")
 _ = plt.legend(loc = "upper right")
 plt.show()

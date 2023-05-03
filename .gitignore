@@ -196,6 +196,7 @@ cython_debug/
 .pqt
 .parquet
 RawData/
+lightning_logs/
 
 # Quarto
 /.quarto/
