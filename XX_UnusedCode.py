@@ -1,4 +1,180 @@
 
+import time
+# Test time of 1 calculation
+start = time.time()
+calc_profit(0.5, 5000, df_xgb)
+end = time.time()
+print(end - start)
+
+
+
+
+
+
+
+
+import plotly.graph_objects as go
+from scipy.interpolate import griddata
+
+# 3D surface plot
+
+# Original x-y-z values
+x = df_profits["Threshold"].values
+y = df_profits["PurchasesXGB"].values
+z = df_profits["ProfitsXGB"].values
+
+# x and y have to have same size and shape (n,)
+xi = np.linspace(x.min(), x.max(), int((len(y) / 100)))
+yi = np.linspace(y.min(), y.max(), int((len(y) / 100)))
+
+# Create coordinate matrices from x and y
+X,Y = np.meshgrid(xi, yi)
+
+# Interpolate z values so z has shape (n, n)
+Z = griddata((x, y), z, (X, Y), method = 'cubic')
+
+fig = go.Figure(go.Surface(x=xi, y=yi, z=Z))
+fig.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Create Pulp model
+m = LpProblem("OptimalThreshold", LpMaximize)
+
+
+# Define variables: threshold prob, 
+t = LpVariable("threshold_prob", 0, 1, "Continuous")
+
+
+# Add objective
+m += lpSum(
+  ((0.2 * c[i]) - (0.7 * c[i] * k[i])) * x for i in range(n)
+  )
+
+
+# Add constraints
+
+
+# Optimize
+print(m)
+
+try:
+  m.solve()
+except:
+  print(traceback.format_exc())
+
+
+# Retrieve optimisation results, all values tried, plot results?
+for var in m.variables():
+  print(var.name, "=", var.varValue)
+
+
+
+pulp.listSolvers(onlyAvailable=True)
+pulp.pulpTestAll()
+solver = pulpl.getSolver('GLPK_CMD')
+
+
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+  File "C:\Users\PC\DOCUME~1\Work\DATASC~1\GitHub\USEDCA~1\venv\lib\site-packages\pulp\pulp.py", line 1913, in solve
+    status = solver.actualSolve(self, **kwargs)
+  File "C:\Users\PC\DOCUME~1\Work\DATASC~1\GitHub\USEDCA~1\venv\lib\site-packages\pulp\apis\coin_api.py", line 137, in actualSolve
+    return self.solve_CBC(lp, **kwargs)
+  File "C:\Users\PC\DOCUME~1\Work\DATASC~1\GitHub\USEDCA~1\venv\lib\site-packages\pulp\apis\coin_api.py", line 202, in solve_CBC
+    cbc = subprocess.Popen(args, stdout=pipe, stderr=pipe, stdin=subprocess.DEVNULL)
+  File "C:\Program Files\Python310\lib\subprocess.py", line 837, in __init__
+    errread, errwrite) = self._get_handles(stdin, stdout, stderr)
+  File "C:\Program Files\Python310\lib\subprocess.py", line 1290, in _get_handles
+    c2pwrite = _winapi.GetStdHandle(_winapi.STD_OUTPUT_HANDLE)
+OSError: [WinError 6] The handle is invalid
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+from mip import *
+
+# MIP optimization
+n = model_xgb.add_var(
+  name = "n_purchases", var_type = INTEGER, lb = 1, ub = len(y_test))
+  
+n = len(y_test)
+
+
+# Create MIP model (choose solver, linear or non-linear?)
+model_xgb = Model(
+  name = "optimize_xgb",
+  sense = MAXIMIZE, # Maximization problem
+  solver_name = CBC # Solver algorithm
+)
+
+
+# Add variables: threshold prob, binary decision variable
+t = model_xgb.add_var(
+  name = "threshold_prob", var_type = CONTINUOUS, lb = 0, ub = 1)
+
+
+# Add objective
+model_xgb.objective = maximize(xsum(
+    ((0.2 * price_xgb[i]) - (0.7 * price_xgb[i] * kick_xgb[i])) * (int((prob_xgb[i] <= t))) for i in range(n)
+))
+
+
+# Optimize
+#model_xgb.max_gap = 0.05
+status = model_xgb.optimize(max_seconds=300)
+if status == OptimizationStatus.OPTIMAL:
+  print('optimal solution cost {} found'.format(model_xgb.objective_value))
+elif status == OptimizationStatus.FEASIBLE:
+  print('sol.cost {} found, best possible: {}'.format(model_xgb.objective_value, model_xgb.objective_bound))
+elif status == OptimizationStatus.NO_SOLUTION_FOUND:
+  print('no feasible solution found, lower bound is: {}'.format(model_xgb.objective_bound))
+if status == OptimizationStatus.OPTIMAL or status == OptimizationStatus.FEASIBLE:
+  print('solution:')
+  for v in model_xgb.vars:
+    print('{} : {}'.format(v.name, v.x))
+
+
+# Retrieve optimisation results, all values tried, plot results?
+
+# Add constraints: 
+# 0 < t < 1, 
+# 1 <= n_purchases <= len(y_test)
+
+
+
+
+
+
+
+
+
+
+
 
 # Debug target encoder missing values
 for i, (train_index, val_index) in enumerate(cv_indices):
