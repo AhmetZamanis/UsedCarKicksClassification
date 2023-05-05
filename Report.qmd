@@ -1,0 +1,91 @@
+---
+title: "Imbalanced classification with deep learning - Used cars problem"
+author: "Ahmet Zamanis"
+format:
+  gfm:
+    toc: true
+    code-fold: true
+    code-summary: "Show code"
+editor: visual
+jupyter: python3
+execute: 
+  warning: false
+---
+
+## Introduction
+
+Classification, imbalanced data, loss functions. Deep learning & SGD
+
+Dataset information and source
+
+## Setup
+
+Import all libraries, functions, settings at the start, possibly in separate chunks
+
+## Data inspection
+
+Load & reformat
+
+View, check missing values, show consequential findings only
+
+## Data cleaning
+
+Show consequential steps only
+
+## Feature engineering
+
+## Preprocessing pipeline
+
+## Modeling & hyperparameter optimization
+
+Watch out for conflicts in variable names. Don't eval / train anything you don't need to.
+
+Don't show Optuna study, optimization etc. code more than once. Validation function and trial function are enough.
+
+Train the final model for each algorithm after its tuning is done.
+
+### Logistic regression with SGD
+
+### Support vector machine with SGD
+
+### XGBoost
+
+### Neural network with PyTorch
+
+Show classes and describe how they work step by step. Split into chunks if necessary.
+
+## Model testing
+
+### Predictions
+
+Retrieve dict of trained models
+
+Predict with trained models in one loop
+
+Watch for variable name compatibility with sensitivity analysis
+
+### Performance metrics: static
+
+AP, brier, brier skill
+
+### Performance metrics: dynamic
+
+F1, precision, recall
+
+### Summary table of metrics
+
+### Precision - recall curves
+
+### F1 score - precision - recall plots
+
+### Predicted probability distributions
+
+## Sensitivity analysis
+
+Watch for variable name compatibility
+
+Latex equations of problem statement
+
+Make the calculations & plots for other models too, or just XGBoost and NN?
+
+## Conclusions

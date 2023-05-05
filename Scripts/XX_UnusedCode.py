@@ -1,15 +1,11 @@
 
+
 import time
 # Test time of 1 calculation
 start = time.time()
 calc_profit(0.5, 5000, df_xgb)
 end = time.time()
 print(end - start)
-
-
-
-
-
 
 
 
@@ -39,30 +35,25 @@ fig.show()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+# Retrieve static inputs for Pulp model as arrays
+pri = x_test["VehBCost"].values # Car prices
+k = y_test.values # Kick or not
+p_xgb = np.array(preds_xgb) # Predicted probs. XGB
+p_nn = preds_nn # Predicted probs. NN
+n = len(y_test) # Cars to buy
 
 # Create Pulp model
 m = LpProblem("OptimalThreshold", LpMaximize)
 
 
-# Define variables: threshold prob, 
-t = LpVariable("threshold_prob", 0, 1, "Continuous")
+# Define variables
+t = LpVariable("threshold_prob", 0, 1, "Continuous") # Threshold prob.
+x = [LpVariable()] # List of binary purchase decision vars. for each car
 
 
 # Add objective
 m += lpSum(
-  ((0.2 * c[i]) - (0.7 * c[i] * k[i])) * x for i in range(n)
+  ((0.1 * pri[i]) - (0.9 * pri[i] * k[i])) * x for i in range(n)
   )
 
 
@@ -84,6 +75,12 @@ for var in m.variables():
 
 
 
+
+
+
+
+
+
 pulp.listSolvers(onlyAvailable=True)
 pulp.pulpTestAll()
 solver = pulpl.getSolver('GLPK_CMD')
@@ -102,12 +99,6 @@ Traceback (most recent call last):
   File "C:\Program Files\Python310\lib\subprocess.py", line 1290, in _get_handles
     c2pwrite = _winapi.GetStdHandle(_winapi.STD_OUTPUT_HANDLE)
 OSError: [WinError 6] The handle is invalid
-
-
-
-
-
-
 
 
 

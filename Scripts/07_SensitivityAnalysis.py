@@ -1,4 +1,4 @@
-# Used cars kicks classification - Optimization
+# Used cars kicks classification - Sensitivity analysis
 # Data source: 
 # https://www.openml.org/search?type=data&sort=runs&id=41162&status=active
 # https://www.kaggle.com/competitions/DontGetKicked/overview
