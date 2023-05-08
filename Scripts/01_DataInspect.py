@@ -136,7 +136,7 @@ df.loc[
   (df["MMRAcquisitionAuctionAveragePrice"] < 100) |
   (df["MMRAcquisitionAuctionCleanPrice"] < 100) |
   (df["MMRAcquisitionRetailAveragePrice"] < 100) |
-  (df["MMRAcquisitonRetailCleanPrice"] < 100)] # 828 rows smaller than 100
+  (df["MMRAcquisitonRetailCleanPrice"] < 100)]
 
   
 # 95% missing column. Missing values are possibly NO. YES means there was unusual

@@ -8,7 +8,7 @@
 exec(open("./Scripts/03_FeatureEngineering.py").read())
 
 
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 from category_encoders.target_encoder import TargetEncoder

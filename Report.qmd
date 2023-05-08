@@ -4,8 +4,6 @@ author: "Ahmet Zamanis"
 format:
   gfm:
     toc: true
-    code-fold: true
-    code-summary: "Show code"
 editor: visual
 jupyter: python3
 execute: 
@@ -20,19 +18,532 @@ Dataset information and source
 
 ## Setup
 
-Import all libraries, functions, settings at the start, possibly in separate chunks
+```{python Imports}
+#| code-fold: true
+#| code-summary: "Show packages"
 
-## Data inspection
+# Data handling
+import pandas as pd
+import numpy as np
+from scipy.io.arff import loadarff
 
-Load & reformat
+# Plotting
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-View, check missing values, show consequential findings only
+# Categorical encoding
+from feature_engine.encoding import OneHotEncoder
+from feature_engine.creation import CyclicalFeatures
+from category_encoders.target_encoder import TargetEncoder
+
+# Preprocessing pipeline
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split, StratifiedKFold
+
+# Modeling & hyperparameter tuning 
+import optuna
+
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.kernel_approximation import RBFSampler
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.dummy import DummyClassifier
+from sklearn.linear_model import SGDClassifier
+from xgboost import XGBClassifier
+
+import torch, torchvision, torchmetrics
+import lightning.pytorch as pl
+
+# Loss functions & performance metrics
+from sklearn.metrics import log_loss
+from sklearn.metrics import hinge_loss
+from sklearn.metrics import average_precision_score, brier_score_loss
+from sklearn.metrics import PrecisionRecallDisplay, precision_recall_curve
+
+# Utilities
+import warnings
+from itertools import product
+```
+
+```{python Settings}
+#| code-fold: true
+#| code-summary: "Show settings"
+
+# Set printing options
+np.set_printoptions(suppress=True, precision=4)
+pd.options.display.float_format = '{:.4f}'.format
+pd.set_option('display.max_columns', None)
+
+# Set plotting options
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams["figure.autolayout"] = True
+sns.set_style("darkgrid")
+
+# Set Torch settings
+torch.set_default_dtype(torch.float32)
+torch.set_float32_matmul_precision('high')
+pl.seed_everything(1923, workers = True)
+warnings.filterwarnings("ignore", ".*does not have many workers.*")
+```
 
 ## Data cleaning
 
-Show consequential steps only
+```{python LoadData}
+
+# Load raw data
+raw_data = loadarff("./RawData/kick.arff")
+
+# Convert to pandas dataframe
+df = pd.DataFrame(raw_data[0])
+
+# Print first & last 5 rows, all columns
+df
+```
+
+```{python ConvertColumns}
+
+# Convert object columns from bytes to string datatype
+object_cols = df.select_dtypes(["object"]).columns
+
+for column in object_cols:
+  df[column] = df[column].apply(lambda x: x.decode("utf-8"))
+del column
+
+
+# Replace "?" values with NAs
+for column in object_cols:
+  df.loc[df[column] == "?", column] = np.nan
+del column
+```
+
+```{python MissingValues}
+
+# Print n. of missing values in each column
+pd.isnull(df).sum()
+```
+
+```{python TargetBalance}
+
+# Target column levels are strongly imbalanced.
+df["IsBadBuy"].value_counts(normalize = True)
+```
+
+```{python PurchaseDate}
+
+# Purchase date is in UNIX timestamp. Convert to datetime
+df["PurchDate"]
+df["PurchDate"] = pd.to_datetime(df["PurchDate"], unit = "s")
+```
+
+```{python Auction}
+
+# 3 unique auctioneers. ADESA, MANHEIM and other. Mostly MANHEIM.
+df["Auction"].value_counts(normalize = True)
+```
+
+```{python VehYearAge}
+
+# Vehicle years range from 2001 to 2010.
+df[["VehYear", "VehicleAge"]].describe()
+
+# Purchase age almost always matches PurchYear - VehYear.
+purch_year = df["PurchDate"].dt.year
+veh_year = df["VehYear"]
+
+print("\nCases where purchase year - vehicle year = vehicle age: ")
+((purch_year - veh_year) == df["VehicleAge"]).sum()
+```
+
+```{python Make}
+
+# There are brands with very few observations.
+df["Make"].value_counts()
+
+# Recode TOYOTA SCION into SCION
+df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
+```
+
+```{python Model}
+
+# There are 1063 unique models, many with only 1 observation.
+df["Model"].value_counts() 
+```
+
+```{python Trim}
+
+# 135 trims, many with only 1 observation. 2360 missing values.
+df["Trim"].value_counts() 
+```
+
+```{python SubModel}
+
+# 864 submodels, many with only 1 observation. 8 missing values.
+df["SubModel"].value_counts() 
+```
+
+```{python ModelSubModel}
+
+# 2718 unique model & submodel combinations, many with only 1 observation.
+(df["Model"] + " " + df["SubModel"]).value_counts()
+```
+
+```{python Cars}
+
+# 3000+ unique cars in dataset (some could be different spellings of same car)
+(df["Model"] + df["Trim"] + df["SubModel"]).value_counts()
+```
+
+```{python Color}
+
+# 8 missing values for color, recode them as NOT AVAIL
+df["Color"].value_counts()
+df.loc[pd.isna(df["Color"]), "Color"] = "NOT AVAIL"
+```
+
+```{python Transmission}
+
+# 9 missing values from transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
+df["Transmission"].value_counts()
+
+# Replace "Manual" with MANUAL in transmission
+df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
+```
+
+```{python TransmissionNAs}
+
+# Work out & impute transmission NAs from car model
+print("Rows with Transmission values missing: ")
+df.loc[pd.isna(df["Transmission"]), ["VehYear", "Make", "Model", "Trim", "SubModel"]]
+
+transmission_nas = ["AUTO", "MANUAL", "MANUAL", "MANUAL", "AUTO", "MANUAL", "MANUAL", "AUTO", "AUTO"]
+  
+df.loc[pd.isna(df["Transmission"]), "Transmission"] = transmission_nas
+```
+
+```{python Wheel}
+
+# 3169 missing values in WheelTypeID, 3174 in WheelType. Crosscheck these columns.
+df["WheelTypeID"].value_counts()
+print("\n")
+df["WheelType"].value_counts()
+```
+
+```{python WheelNAs}
+
+print("N. of WheelTypeID NAs that are also WheelType NAs: " + 
+str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
+)
+
+print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
+df.loc[df["WheelTypeID"] == "0", "WheelType"]
+```
+
+```{python WheelIDvsType}
+
+print("Cases where WheelTypeID 1 = WheelType Alloy: " + str(
+  (df.loc[df["WheelTypeID"] == "1", "WheelType"] == "Alloy").sum()
+))
+
+print("Cases where WheelTypeID 2 = WheelType Covers: " + str(
+  (df.loc[df["WheelTypeID"] == "2", "WheelType"] == "Covers").sum()
+))
+
+print("Cases where WheelTypeID 3 = WheelType Special: " + str(
+  (df.loc[df["WheelTypeID"] == "3", "WheelType"] == "Special").sum()
+))
+```
+
+```{python DropWheelID}
+
+# Recode WheelType NAs as Other, drop WheelTypeID column
+df.loc[pd.isnull(df["WheelType"]), "WheelType"] = "Other"
+df = df.drop("WheelTypeID", axis = 1)
+```
+
+```{python Nationality}
+
+# 5 missing values in Nationality. Work these out from car make. 
+df["Nationality"].value_counts()
+```
+
+```{python NationalityNAs}
+
+# Work out the 5 missing Nationality values from make
+print("Makes of rows with missing Nationality values: ")
+df.loc[pd.isnull(df["Nationality"]), "Make"]
+nationality_nas = ["AMERICAN", "AMERICAN", "OTHER ASIAN", "AMERICAN", "AMERICAN"]
+df.loc[pd.isnull(df["Nationality"]), "Nationality"] = nationality_nas
+```
+
+```{python Size}
+
+# 5 missing values in size. Work these out from the model.
+df["Size"].value_counts()
+```
+
+```{python SizeNAs}
+
+# Work out the 5 missing Size values from make & model
+print("Rows with Size values missing: ")
+df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]]
+
+print("\nSize values of other rows with same model: ")
+df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0]
+df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0]
+df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0]
+df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0]
+
+size_nas = ["LARGE TRUCK", "MEDIUM SUV", "MEDIUM", "SMALL SUV", "SMALL SUV"]
+df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
+```
+
+```{python Top3}
+
+# Unnecessary column, information already incorporated in Make. Drop it
+df["TopThreeAmericanName"].value_counts()
+df = df.drop("TopThreeAmericanName", axis = 1)
+```
+
+```{python MMR}
+
+print("Missing values in MMR columns:")
+pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
+       'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
+       'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
+       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum()
+       
+# Drop current MMR prices to make the exercise more realistic
+df = df.drop([
+  'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
+  'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice'], axis = 1)
+```
+
+```{python MMRZerosOnes}
+
+# Some MMR values are zero
+print("N. of rows with at least one MMR value of 0:") 
+len(df.loc[
+  (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
+  (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
+  (df["MMRAcquisitionRetailAveragePrice"] == 0) |
+  (df["MMRAcquisitonRetailCleanPrice"] == 0)
+  ])
+
+# Some MMR values are one
+print("N. of rows with at least one MMR value of 1:") 
+len(df.loc[
+  (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
+  (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
+  (df["MMRAcquisitionRetailAveragePrice"] == 1) |
+  (df["MMRAcquisitonRetailCleanPrice"] == 1)
+  ])
+  
+# Drop rows with NAs in MMR
+df = df.dropna(subset = [
+  'MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
+  'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice'])
+
+# Drop rows with 0s in MMR
+df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
+  (df["MMRAcquisitionAuctionCleanPrice"] > 0) &
+  (df["MMRAcquisitionRetailAveragePrice"] > 0) &
+  (df["MMRAcquisitonRetailCleanPrice"] > 0)].copy()
+```
+
+```{python PRIMEUNIT}
+
+# 95% missing column. Missing values possibly mean NO. YES means there was unusual
+# demand for the car.
+df["PRIMEUNIT"].value_counts(normalize = True)
+
+# Fill NAs in PRIMEUNIT with UNKNOWN.
+df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
+```
+
+```{python AUCGUART}
+
+# 95% missing column. AUCGUART is the vehicle inspection level at auction. Green
+# means inspected, yellow means partial information available, red means you buy what you see. Could assume yellow for missing values.
+df["AUCGUART"].value_counts(normalize = True)
+
+# Fill NAs in AUCGUART with UNKNOWN.
+df.loc[pd.isnull(df["AUCGUART"]), "AUCGUART"] = "UNKNOWN"
+```
+
+```{python BYRNO}
+
+# BYRNO is buyer no. 74 unique buyers, some with only 1 observation.
+df["BYRNO"].value_counts()
+```
+
+```{python VNZIP1}
+
+# VNZIP1 is zipcode of purchase location, 153 locations, some with only 1 obs.
+df["VNZIP1"].value_counts()
+```
+
+```{python VNST}
+
+# VNST is purchase state.
+df["VNST"].value_counts()
+```
+
+```{python Price}
+
+# VehBCost is purchase price. 68 missing values, drop these rows. One car has a purchase price of 1.
+df["VehBCost"].describe()
+df = df.dropna(subset = "VehBCost")
+```
+
+```{python Warranty}
+
+# Warranty cost is for 36 months, or until 36k miles
+df["WarrantyCost"].describe()
+```
 
 ## Feature engineering
+
+```{python TimeFeatures}
+
+# Time features from date: Purchase year, month, day of week
+df["PurchaseYear"] = df["PurchDate"].dt.year
+df["PurchaseMonth"] = df["PurchDate"].dt.month
+df["PurchaseDay"] = df["PurchDate"].dt.weekday
+df = df.drop("PurchDate", axis = 1)
+```
+
+```{python EngineDrivetrain}
+
+# Engine type features from Model: V6, V8, I4/I-4, 4C, 6C
+df["EngineV6"] = df["Model"].str.contains("V6").astype(int)
+df["EngineV8"] = df["Model"].str.contains("V8").astype(int)
+df["EngineI4"] = df["Model"].str.contains("I4|I-4", regex = True).astype(int)
+df["Engine4C"] = df["Model"].str.contains("4C").astype(int)
+df["Engine6C"] = df["Model"].str.contains("6C").astype(int)
+
+# Drivetrain type features from Model: 2WD, 4WD, AWD, FWD, RWD
+df["2WD"] = df["Model"].str.contains("2WD").astype(int)
+df["4WD"] = df["Model"].str.contains("4WD").astype(int)
+df["AWD"] = df["Model"].str.contains("AWD").astype(int)
+df["FWD"] = df["Model"].str.contains("FWD").astype(int)
+df["RWD"] = df["Model"].str.contains("RWD").astype(int)
+```
+
+```{python Chassis}
+
+# Chassis type features from SubModel: WAGON, SEDAN, COUPE, HATCHBACK, CONVERTIBLE
+# Work out and recode these features manually for rows where SubModel is missing
+print("Rows where SubModel is missing:")
+df.loc[pd.isnull(df["SubModel"]), "Model"]
+
+df["ChassisWagon"] = df["SubModel"].str.contains("WAGON")
+df.loc[pd.isnull(df["ChassisWagon"]), "ChassisWagon"] = [
+  False, False, False, False, False, False, False, True]
+df["ChassisWagon"] = df["ChassisWagon"].astype(int)
+
+df["ChassisSedan"] = df["SubModel"].str.contains("SEDAN")
+df.loc[pd.isnull(df["ChassisSedan"]), "ChassisSedan"] = [
+  True, True, False, True, True, True, False, False]
+df["ChassisSedan"] = df["ChassisSedan"].astype(int)
+
+df["ChassisCoupe"] = df["SubModel"].str.contains("COUPE")
+df.loc[pd.isnull(df["ChassisCoupe"]), "ChassisCoupe"] = False
+df["ChassisCoupe"] = df["ChassisCoupe"].astype(int)
+
+df["ChassisHatch"] = df["SubModel"].str.contains("HATCHBACK")
+df.loc[pd.isnull(df["ChassisHatch"]), "ChassisHatch"] = False
+df["ChassisHatch"] = df["ChassisHatch"].astype(int)
+
+df["ChassisConvertible"] = df["SubModel"].str.contains("CONVERTIBLE")
+df.loc[pd.isnull(df["ChassisConvertible"]), "ChassisConvertible"] = False
+df["ChassisConvertible"] = df["ChassisConvertible"].astype(int)
+```
+
+```{python Doors}
+
+# Door type feature from SubModel: 4D
+df["FourDoors"] = df["SubModel"].str.contains("4D")
+
+# Work out and recode this feature manually for rows where SubModel is missing (displayed in previous cell)
+df.loc[pd.isnull(df["FourDoors"]), "FourDoors"] = [
+  True, True, False, True, True, True, False, False]
+df["FourDoors"] = df["FourDoors"].astype(int)
+```
+
+```{python ModelSubModel}
+
+# Recode SubModel NAs into empty string
+df.loc[pd.isnull(df["SubModel"]), "SubModel"] = ""
+
+# Combine Model & SubModel as one feature
+df["ModelSubModel"] = df["Model"] + " " + df["SubModel"]
+
+# Drop trim, submodel
+df = df.drop(["Trim", "SubModel"], axis = 1)
+```
+
+```{python MilesPerYear}
+
+# Miles per year feature
+df["MilesPerYear"] = df["VehOdo"] / df["VehicleAge"]
+df.loc[df["MilesPerYear"] == np.inf, "MilesPerYear"] = df["VehOdo"] # Replace inf values raised when vehicle age = 0
+```
+
+```{python Premium}
+
+# Premiums / discounts paid on MMR prices: VehBCost - MMR price / MMR price
+df["PremiumAuctionAvg"] = (df["VehBCost"] - df["MMRAcquisitionAuctionAveragePrice"]) / df["MMRAcquisitionAuctionAveragePrice"]
+
+df["PremiumAuctionClean"] = (df["VehBCost"] - df["MMRAcquisitionAuctionCleanPrice"]) / df["MMRAcquisitionAuctionCleanPrice"]
+
+df["PremiumRetailAvg"] = (df["VehBCost"] - df["MMRAcquisitionRetailAveragePrice"]) / df["MMRAcquisitionRetailAveragePrice"]
+  
+df["PremiumRetailClean"] = (df["VehBCost"] - df["MMRAcquisitonRetailCleanPrice"]) / df["MMRAcquisitonRetailCleanPrice"]
+```
+
+```{python WarrantyRatio}
+
+# Warranty ratio to purchase price
+df["WarrantyRatio"] = df["WarrantyCost"] / df["VehBCost"]
+
+# The observation with purchase price = 1 skews the WarrantyRatio feature greatly. Drop it.
+df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = False).iloc[0]
+df = df.loc[df["VehBCost"] != 1].copy()
+```
+
+```{python OneHotEncode}
+
+# One hot encode some categoricals in-place
+encoder_onehot = OneHotEncoder(
+  drop_last = True, # Create N-1 binary columns to encode N categorical levels
+  drop_last_binary = True,
+  variables = ['Auction', 'VehYear', 'Color', 'Transmission', 'WheelType', 
+  'Nationality', 'Size', 'PurchaseYear'],
+  ignore_format = True)
+df = encoder_onehot.fit_transform(df)
+
+# One hot encode PRIMEUNIT and AUCGUART only using known values
+df["PRIMEUNIT_YES"] = (df["PRIMEUNIT"] == "YES").astype(int)
+df["PRIMEUNIT_NO"] = (df["PRIMEUNIT"] == "NO").astype(int)
+df["AUCGUART_GREEN"] = (df["AUCGUART"] == "GREEN").astype(int)
+df["AUCGUART_RED"] = (df["AUCGUART"] == "RED").astype(int)
+df = df.drop(["PRIMEUNIT", "AUCGUART"], axis = 1)
+```
+
+```{python CyclicalEncode}
+
+# Cyclical encode month and day of week features
+encoder_cyclical = CyclicalFeatures(
+  variables = ["PurchaseMonth", "PurchaseDay"], drop_original = True)
+df = encoder_cyclical.fit_transform(df)
+```
+
+```{python ViewFeatures}
+
+# View final feature set before preprocessing
+df.head()
+```
 
 ## Preprocessing pipeline
 
