@@ -5,7 +5,7 @@
 
 
 # Source previous script
-exec(open("04_Preprocessing.py").read())
+exec(open("./Scripts/04_Preprocessing.py").read())
 
 
 import matplotlib.pyplot as plt
@@ -14,7 +14,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss
 from sklearn.metrics import PrecisionRecallDisplay, precision_recall_curve
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.dummy import DummyClassifier
-from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.linear_model import SGDClassifier
 from sklearn.kernel_approximation import RBFSampler
 from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier

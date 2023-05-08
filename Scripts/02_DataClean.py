@@ -5,7 +5,7 @@
 
 
 # Source previous script
-exec(open("01_DataInspect.py").read())
+exec(open("./Scripts/01_DataInspect.py").read())
 
 
 # TOYOTA SCION into SCION

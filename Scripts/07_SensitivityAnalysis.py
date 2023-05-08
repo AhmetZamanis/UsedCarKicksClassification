@@ -5,15 +5,23 @@
 
 
 # Source previous script
-exec(open("04_Preprocessing.py").read())
+exec(open("./Scripts/04_Preprocessing.py").read())
 
 
-import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.dummy import DummyClassifier
+from sklearn.linear_model import SGDClassifier
+from sklearn.kernel_approximation import RBFSampler
+from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
+
 import torch, torchvision
 import lightning.pytorch as pl
 from XX_LightningClasses import TrainDataset, TestDataset, SeluDropoutModel
+
 from itertools import product
 
 
@@ -34,6 +42,71 @@ pl.seed_everything(1923, workers = True)
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
 sample_weight = np.where(y_train == 1, class_weight[1], class_weight[0])
+
+
+# Create dummy classifier which predicts the prior class probabilities
+model_dummy = DummyClassifier(strategy = "prior")
+
+
+# Train & predict with dummy classifier
+model_dummy.fit(x_train, y_train)
+preds_dummy = model_dummy.predict_proba(x_test)
+preds_dummy = [x[1] for x in preds_dummy]
+
+
+# Create logistic regression pipeline with optimal hyperparameters
+best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
+pipe_logistic = Pipeline(steps = [
+  ("preprocessing", pipe_process),
+  ("Logistic", SGDClassifier(
+      loss = "log_loss",
+      penalty = "elasticnet",
+      alpha = best_trial_logistic["params_reg_strength"],
+      l1_ratio = best_trial_logistic["params_l1_ratio"],
+      max_iter = 26,
+      n_iter_no_change = 1000, # Ensure model doesn't early stop based on train loss
+      verbose = 1,
+      random_state = 1923
+    )
+  )
+])
+
+
+# Train & predict with logistic regression
+pipe_logistic.fit(x_train, y_train, Logistic__sample_weight = sample_weight)
+preds_logistic = pipe_logistic.predict_proba(x_test)
+preds_logistic = [x[1] for x in preds_logistic]
+
+
+# Create SVM pipeline with optimal hyperparameters
+best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
+pipe_svm = Pipeline(steps = [
+  ("preprocessing", pipe_process),
+  ("KernelTrick", RBFSampler(
+      gamma = "scale",
+      n_components = 100,
+      random_state = 1923
+    )
+  ),
+  ("SVM", CalibratedClassifierCV(SGDClassifier(
+      loss = "hinge",
+      penalty = "elasticnet",
+      alpha = best_trial_svm["params_reg_strength"],
+      l1_ratio = best_trial_svm["params_l1_ratio"],
+      max_iter = 13,
+      n_iter_no_change = 1000, # Ensure model doesn't early stop based on train loss
+      verbose = 1,
+      random_state = 1923
+      )
+    )
+  )
+])
+
+
+# Train & predict with SVM
+pipe_svm.fit(x_train, y_train, SVM__sample_weight = sample_weight)
+preds_svm = pipe_svm.predict_proba(x_test)
+preds_svm = [x[1] for x in preds_svm]
 
 
 # Create XGBoost pipeline with optimal hyperparameters
@@ -105,7 +178,7 @@ trainer = pl.Trainer(
       enable_checkpointing = False
     )
     
-# Train model
+# Train NN model
 trainer.fit(model_nn, train_loader)
 
 # Predict with NN model
@@ -117,6 +190,27 @@ preds_nn = np.float32(y_prob[0].numpy().reshape(1, -1)[0])
 
 # Retrieve prob. predictions, target labels, purchase prices in dataframes, sort in
 # descending order according to prob. predictions
+df_dummy = pd.DataFrame({
+  "Price": x_test["VehBCost"],
+  "Kick": y_test,
+  "ProbKick": preds_dummy
+})
+df_dummy = df_dummy.sort_values("ProbKick", ascending = True)
+
+df_logistic = pd.DataFrame({
+  "Price": x_test["VehBCost"],
+  "Kick": y_test,
+  "ProbKick": preds_logistic
+})
+df_logistic = df_logistic.sort_values("ProbKick", ascending = True)
+
+df_svm = pd.DataFrame({
+  "Price": x_test["VehBCost"],
+  "Kick": y_test,
+  "ProbKick": preds_svm
+})
+df_svm = df_svm.sort_values("ProbKick", ascending = True)
+
 df_xgb = pd.DataFrame({
   "Price": x_test["VehBCost"],
   "Kick": y_test,
@@ -160,6 +254,18 @@ thresholds_buys = list(product(thresholds, num_buys))
 
 
 # Calculate n. of cars actually bought and profit at each threshold / buy combination
+output_dummy = [calc_profit(x, y, df_dummy) for x, y in thresholds_buys]
+decisions_dummy = [x[0] for x in output_dummy]
+profits_dummy= [x[1] for x in output_dummy]
+
+output_logistic = [calc_profit(x, y, df_logistic) for x, y in thresholds_buys]
+decisions_logistic = [x[0] for x in output_logistic]
+profits_logistic = [x[1] for x in output_logistic]
+
+output_svm = [calc_profit(x, y, df_svm) for x, y in thresholds_buys]
+decisions_svm = [x[0] for x in output_svm]
+profits_svm = [x[1] for x in output_svm]
+
 output_xgb = [calc_profit(x, y, df_xgb) for x, y in thresholds_buys]
 decisions_xgb = [x[0] for x in output_xgb]
 profits_xgb = [x[1] for x in output_xgb]
@@ -169,7 +275,28 @@ decisions_nn = [x[0] for x in output_nn]
 profits_nn = [x[1] for x in output_nn]
 
 
-# Make long dataframe of threshold-purchase-profit values
+# Make long dataframes of threshold-purchase-profit values
+df_long_dummy = pd.DataFrame({
+  "Threshold": [x[0] for x in thresholds_buys],
+  "Purchases": decisions_dummy,
+  "Profits": profits_dummy,
+  "Model": "Dummy"
+})
+
+df_long_logistic = pd.DataFrame({
+  "Threshold": [x[0] for x in thresholds_buys],
+  "Purchases": decisions_logistic,
+  "Profits": profits_logistic,
+  "Model": "Logistic"
+})
+
+df_long_svm = pd.DataFrame({
+  "Threshold": [x[0] for x in thresholds_buys],
+  "Purchases": decisions_svm,
+  "Profits": profits_svm,
+  "Model": "SVM"
+})
+
 df_long_xgb = pd.DataFrame({
   "Threshold": [x[0] for x in thresholds_buys],
   "Purchases": decisions_xgb,
@@ -184,7 +311,9 @@ df_long_nn = pd.DataFrame({
   "Model": "Neural net"
 })
 
-df_long = pd.concat([df_long_xgb, df_long_nn])
+
+# Combine long dataframes into one
+df_long = pd.concat([df_long_dummy, df_long_logistic, df_long_svm, df_long_xgb, df_long_nn])
 
 # Drop rows with duplicates of purchase-profit-model columns (cases where a 
 # probability t results in buying n number of cars, and a higher t doesn't result 
@@ -192,22 +321,53 @@ df_long = pd.concat([df_long_xgb, df_long_nn])
 df_long = df_long.drop_duplicates(["Purchases", "Profits", "Model"])
 
 
-# 3D scatterplot of thresholds-profits
-fig = px.line_3d(
-  df_long, x = 'Threshold', y = 'Purchases', z = 'Profits', 
-  color = 'Model', line_dash = "Model", markers = True,
-  title = "Sensitivity analysis: Profits / losses from purchasing top N cars predicted least likely to be kicks",
-  labels = {
-    "Threshold": "Threshold prob. of classifier",
-    "Purchases": "Number of purchases",
-    "Profits": "Total profit, $"
-  })
-fig.show()
+# 2D lineplots of thresholds-purchases-profits
+fig, ax = plt.subplots(3)
+_ = fig.suptitle("Relationships between classifier threshold probability, number of cars purchased and profit")
+
+_ = sns.lineplot(
+  ax = ax[0],
+  data = df_long, x = "Threshold", y = "Profits", hue = "Model")
+_ = ax[0].set_xlabel("Threshold probability")
+_ = ax[0].set_ylabel("Profits, $mil")
+  
+
+_ = sns.lineplot(
+  ax = ax[1],
+  data = df_long, x = "Threshold", y = "Purchases", hue = "Model", legend = False)
+_ = ax[1].set_xlabel("Threshold probability (lowest value that results in N. cars purchased)")
+_ = ax[1].set_ylabel("N. cars purchased")
+
+_ = sns.lineplot(
+  ax = ax[2],
+  data = df_long, x = "Purchases", y = "Profits", hue = "Model", legend = False)
+_ = ax[2].set_xlabel("N. cars purchased")
+_ = ax[2].set_ylabel("Profits, $mil")
 
 
-# Quasi-optimal combination of threshold prob - n. purchases
-df_long_xgb.loc[np.argmax(df_long_xgb["Profits"])]
-df_long_nn.loc[np.argmax(df_long_nn["Profits"])]
- 
+plt.show()
+plt.savefig("./Plots/sensitivity.png", dpi = 300)
+plt.close("all")
 
+
+# Quasi-optimal combinations of threshold prob - n. purchases
+optimal_dummy = df_long_dummy.loc[np.argmax(df_long_dummy["Profits"])]
+optimal_logistic = df_long_logistic.loc[np.argmax(df_long_logistic["Profits"])]
+optimal_svm = df_long_svm.loc[np.argmax(df_long_svm["Profits"])]
+optimal_xgb = df_long_xgb.loc[np.argmax(df_long_xgb["Profits"])]
+optimal_nn =df_long_nn.loc[np.argmax(df_long_nn["Profits"])]
+
+df_optimal = pd.concat([
+  optimal_dummy, optimal_logistic, optimal_svm, optimal_xgb, optimal_nn], 
+  axis = 1).transpose()
+
+df_optimal["Profits"] = df_optimal["Profits"] / 1e6
+  
+df_optimal = df_optimal.rename({
+  "Threshold": "Threshold prob.",
+  "Purchases": "N. cars purchased",
+  "Profits": "Profits, $mil"
+}, axis = 1)
+
+df_optimal
 

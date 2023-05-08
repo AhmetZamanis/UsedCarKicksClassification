@@ -5,7 +5,7 @@
 
 
 # Source previous script
-exec(open("03_FeatureEngineering.py").read())
+exec(open("./Scripts/03_FeatureEngineering.py").read())
 
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score

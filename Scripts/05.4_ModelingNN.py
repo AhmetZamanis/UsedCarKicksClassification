@@ -5,7 +5,7 @@
 
 
 # Source previous script
-exec(open("04_Preprocessing.py").read())
+exec(open("./Scripts/04_Preprocessing.py").read())
 
 
 import optuna

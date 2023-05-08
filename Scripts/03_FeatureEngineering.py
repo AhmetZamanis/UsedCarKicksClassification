@@ -5,7 +5,7 @@
 
 
 # Source previous script
-exec(open("02_DataClean.py").read())
+exec(open("./Scripts/02_DataClean.py").read())
 
 
 from feature_engine.encoding import OneHotEncoder
