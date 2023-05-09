@@ -1,14 +1,52 @@
----
-title: "Imbalanced classification with deep learning - Used cars problem"
-author: "Ahmet Zamanis"
-format:
-  gfm:
-    toc: true
-editor: visual
-jupyter: python3
-execute: 
-  warning: false
----
+Imbalanced classification with deep learning - Used cars problem
+================
+Ahmet Zamanis
+
+- <a href="#introduction" id="toc-introduction">Introduction</a>
+- <a href="#setup" id="toc-setup">Setup</a>
+- <a href="#data-cleaning" id="toc-data-cleaning">Data cleaning</a>
+- <a href="#feature-engineering" id="toc-feature-engineering">Feature
+  engineering</a>
+- <a href="#preprocessing-pipeline"
+  id="toc-preprocessing-pipeline">Preprocessing pipeline</a>
+- <a href="#modeling-hyperparameter-optimization"
+  id="toc-modeling-hyperparameter-optimization">Modeling &amp;
+  hyperparameter optimization</a>
+  - <a href="#logistic-regression-with-sgd"
+    id="toc-logistic-regression-with-sgd">Logistic regression with SGD</a>
+  - <a href="#support-vector-machine-with-sgd"
+    id="toc-support-vector-machine-with-sgd">Support vector machine with
+    SGD</a>
+  - <a href="#xgboost" id="toc-xgboost">XGBoost</a>
+  - <a href="#neural-network-with-pytorch"
+    id="toc-neural-network-with-pytorch">Neural network with PyTorch</a>
+- <a href="#model-testing" id="toc-model-testing">Model testing</a>
+  - <a href="#training-prediction-with-final-models"
+    id="toc-training-prediction-with-final-models">Training &amp; prediction
+    with final models</a>
+  - <a href="#calculating-performance-metrics"
+    id="toc-calculating-performance-metrics">Calculating performance
+    metrics</a>
+  - <a href="#summary-table-of-performance-metrics"
+    id="toc-summary-table-of-performance-metrics">Summary table of
+    performance metrics</a>
+  - <a href="#precision---recall-curves"
+    id="toc-precision---recall-curves">Precision - recall curves</a>
+  - <a href="#f1-score---precision---recall-plots"
+    id="toc-f1-score---precision---recall-plots">F1 score - precision -
+    recall plots</a>
+  - <a href="#predicted-probability-distributions"
+    id="toc-predicted-probability-distributions">Predicted probability
+    distributions</a>
+- <a href="#sensitivity-analysis"
+  id="toc-sensitivity-analysis">Sensitivity analysis</a>
+  - <a href="#problem-formulation" id="toc-problem-formulation">Problem
+    formulation</a>
+  - <a href="#calculations" id="toc-calculations">Calculations</a>
+  - <a href="#plots-and-quasi-optimal-solutions"
+    id="toc-plots-and-quasi-optimal-solutions">Plots and quasi-optimal
+    solutions</a>
+- <a href="#conclusions" id="toc-conclusions">Conclusions</a>
 
 ## Introduction
 
@@ -18,10 +56,10 @@ Dataset information and source
 
 ## Setup
 
-```{python Imports}
-#| code-fold: true
-#| code-summary: "Show packages"
+<details>
+<summary>Show packages</summary>
 
+``` python
 # Data handling
 import pandas as pd
 import numpy as np
@@ -68,10 +106,11 @@ import warnings
 from itertools import product
 ```
 
-```{python Settings}
-#| code-fold: true
-#| code-summary: "Show settings"
+</details>
+<details>
+<summary>Show settings</summary>
 
+``` python
 # Set printing options
 np.set_printoptions(suppress=True, precision=4)
 pd.options.display.float_format = '{:.4f}'.format
@@ -90,10 +129,11 @@ pl.seed_everything(1923, workers = True)
 warnings.filterwarnings("ignore", ".*does not have many workers.*")
 ```
 
+</details>
+
 ## Data cleaning
 
-```{python LoadData}
-
+``` python
 # Load raw data
 raw_data = loadarff("./RawData/kick.arff")
 
@@ -104,8 +144,462 @@ df = pd.DataFrame(raw_data[0])
 df
 ```
 
-```{python ConvertColumns}
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
 
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>IsBadBuy</th>
+      <th>PurchDate</th>
+      <th>Auction</th>
+      <th>VehYear</th>
+      <th>VehicleAge</th>
+      <th>Make</th>
+      <th>Model</th>
+      <th>Trim</th>
+      <th>SubModel</th>
+      <th>Color</th>
+      <th>Transmission</th>
+      <th>WheelTypeID</th>
+      <th>WheelType</th>
+      <th>VehOdo</th>
+      <th>Nationality</th>
+      <th>Size</th>
+      <th>TopThreeAmericanName</th>
+      <th>MMRAcquisitionAuctionAveragePrice</th>
+      <th>MMRAcquisitionAuctionCleanPrice</th>
+      <th>MMRAcquisitionRetailAveragePrice</th>
+      <th>MMRAcquisitonRetailCleanPrice</th>
+      <th>MMRCurrentAuctionAveragePrice</th>
+      <th>MMRCurrentAuctionCleanPrice</th>
+      <th>MMRCurrentRetailAveragePrice</th>
+      <th>MMRCurrentRetailCleanPrice</th>
+      <th>PRIMEUNIT</th>
+      <th>AUCGUART</th>
+      <th>BYRNO</th>
+      <th>VNZIP1</th>
+      <th>VNST</th>
+      <th>VehBCost</th>
+      <th>IsOnlineSale</th>
+      <th>WarrantyCost</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>b'0'</td>
+      <td>1260144000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2006.0000</td>
+      <td>3.0000</td>
+      <td>b'MAZDA'</td>
+      <td>b'MAZDA3'</td>
+      <td>b'i'</td>
+      <td>b'4D SEDAN I'</td>
+      <td>b'RED'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>89046.0000</td>
+      <td>b'OTHER ASIAN'</td>
+      <td>b'MEDIUM'</td>
+      <td>b'OTHER'</td>
+      <td>8155.0000</td>
+      <td>9829.0000</td>
+      <td>11636.0000</td>
+      <td>13600.0000</td>
+      <td>7451.0000</td>
+      <td>8552.0000</td>
+      <td>11597.0000</td>
+      <td>12409.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'21973'</td>
+      <td>b'33619'</td>
+      <td>b'FL'</td>
+      <td>7100.0000</td>
+      <td>b'0'</td>
+      <td>1113.0000</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>b'0'</td>
+      <td>1260144000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2004.0000</td>
+      <td>5.0000</td>
+      <td>b'DODGE'</td>
+      <td>b'1500 RAM PICKUP 2WD'</td>
+      <td>b'ST'</td>
+      <td>b'QUAD CAB 4.7L SLT'</td>
+      <td>b'WHITE'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>93593.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'LARGE TRUCK'</td>
+      <td>b'CHRYSLER'</td>
+      <td>6854.0000</td>
+      <td>8383.0000</td>
+      <td>10897.0000</td>
+      <td>12572.0000</td>
+      <td>7456.0000</td>
+      <td>9222.0000</td>
+      <td>11374.0000</td>
+      <td>12791.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'19638'</td>
+      <td>b'33619'</td>
+      <td>b'FL'</td>
+      <td>7600.0000</td>
+      <td>b'0'</td>
+      <td>1053.0000</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>b'0'</td>
+      <td>1260144000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2005.0000</td>
+      <td>4.0000</td>
+      <td>b'DODGE'</td>
+      <td>b'STRATUS V6'</td>
+      <td>b'SXT'</td>
+      <td>b'4D SEDAN SXT FFV'</td>
+      <td>b'MAROON'</td>
+      <td>b'AUTO'</td>
+      <td>b'2'</td>
+      <td>b'Covers'</td>
+      <td>73807.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'MEDIUM'</td>
+      <td>b'CHRYSLER'</td>
+      <td>3202.0000</td>
+      <td>4760.0000</td>
+      <td>6943.0000</td>
+      <td>8457.0000</td>
+      <td>4035.0000</td>
+      <td>5557.0000</td>
+      <td>7146.0000</td>
+      <td>8702.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'19638'</td>
+      <td>b'33619'</td>
+      <td>b'FL'</td>
+      <td>4900.0000</td>
+      <td>b'0'</td>
+      <td>1389.0000</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>b'0'</td>
+      <td>1260144000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2004.0000</td>
+      <td>5.0000</td>
+      <td>b'DODGE'</td>
+      <td>b'NEON'</td>
+      <td>b'SXT'</td>
+      <td>b'4D SEDAN'</td>
+      <td>b'SILVER'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>65617.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'COMPACT'</td>
+      <td>b'CHRYSLER'</td>
+      <td>1893.0000</td>
+      <td>2675.0000</td>
+      <td>4658.0000</td>
+      <td>5690.0000</td>
+      <td>1844.0000</td>
+      <td>2646.0000</td>
+      <td>4375.0000</td>
+      <td>5518.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'19638'</td>
+      <td>b'33619'</td>
+      <td>b'FL'</td>
+      <td>4100.0000</td>
+      <td>b'0'</td>
+      <td>630.0000</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>b'0'</td>
+      <td>1260144000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2005.0000</td>
+      <td>4.0000</td>
+      <td>b'FORD'</td>
+      <td>b'FOCUS'</td>
+      <td>b'ZX3'</td>
+      <td>b'2D COUPE ZX3'</td>
+      <td>b'SILVER'</td>
+      <td>b'MANUAL'</td>
+      <td>b'2'</td>
+      <td>b'Covers'</td>
+      <td>69367.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'COMPACT'</td>
+      <td>b'FORD'</td>
+      <td>3913.0000</td>
+      <td>5054.0000</td>
+      <td>7723.0000</td>
+      <td>8707.0000</td>
+      <td>3247.0000</td>
+      <td>4384.0000</td>
+      <td>6739.0000</td>
+      <td>7911.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'19638'</td>
+      <td>b'33619'</td>
+      <td>b'FL'</td>
+      <td>4000.0000</td>
+      <td>b'0'</td>
+      <td>1020.0000</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>72978</th>
+      <td>b'1'</td>
+      <td>1259712000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2001.0000</td>
+      <td>8.0000</td>
+      <td>b'MERCURY'</td>
+      <td>b'SABLE'</td>
+      <td>b'GS'</td>
+      <td>b'4D SEDAN GS'</td>
+      <td>b'BLACK'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>45234.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'MEDIUM'</td>
+      <td>b'FORD'</td>
+      <td>1996.0000</td>
+      <td>2993.0000</td>
+      <td>2656.0000</td>
+      <td>3732.0000</td>
+      <td>2190.0000</td>
+      <td>3055.0000</td>
+      <td>4836.0000</td>
+      <td>5937.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'18111'</td>
+      <td>b'30212'</td>
+      <td>b'GA'</td>
+      <td>4200.0000</td>
+      <td>b'0'</td>
+      <td>993.0000</td>
+    </tr>
+    <tr>
+      <th>72979</th>
+      <td>b'0'</td>
+      <td>1259712000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2007.0000</td>
+      <td>2.0000</td>
+      <td>b'CHEVROLET'</td>
+      <td>b'MALIBU 4C'</td>
+      <td>b'LS'</td>
+      <td>b'4D SEDAN LS'</td>
+      <td>b'SILVER'</td>
+      <td>b'AUTO'</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>71759.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'MEDIUM'</td>
+      <td>b'GM'</td>
+      <td>6418.0000</td>
+      <td>7325.0000</td>
+      <td>7431.0000</td>
+      <td>8411.0000</td>
+      <td>6785.0000</td>
+      <td>8132.0000</td>
+      <td>10151.0000</td>
+      <td>11652.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'18881'</td>
+      <td>b'30212'</td>
+      <td>b'GA'</td>
+      <td>6200.0000</td>
+      <td>b'0'</td>
+      <td>1038.0000</td>
+    </tr>
+    <tr>
+      <th>72980</th>
+      <td>b'0'</td>
+      <td>1259712000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2005.0000</td>
+      <td>4.0000</td>
+      <td>b'JEEP'</td>
+      <td>b'GRAND CHEROKEE 2WD V'</td>
+      <td>b'Lar'</td>
+      <td>b'4D WAGON LAREDO'</td>
+      <td>b'SILVER'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>88500.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'MEDIUM SUV'</td>
+      <td>b'CHRYSLER'</td>
+      <td>8545.0000</td>
+      <td>9959.0000</td>
+      <td>9729.0000</td>
+      <td>11256.0000</td>
+      <td>8375.0000</td>
+      <td>9802.0000</td>
+      <td>11831.0000</td>
+      <td>14402.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'18111'</td>
+      <td>b'30212'</td>
+      <td>b'GA'</td>
+      <td>8200.0000</td>
+      <td>b'0'</td>
+      <td>1893.0000</td>
+    </tr>
+    <tr>
+      <th>72981</th>
+      <td>b'0'</td>
+      <td>1259712000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2006.0000</td>
+      <td>3.0000</td>
+      <td>b'CHEVROLET'</td>
+      <td>b'IMPALA'</td>
+      <td>b'LS'</td>
+      <td>b'4D SEDAN LS'</td>
+      <td>b'WHITE'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>79554.0000</td>
+      <td>b'AMERICAN'</td>
+      <td>b'LARGE'</td>
+      <td>b'GM'</td>
+      <td>6420.0000</td>
+      <td>7604.0000</td>
+      <td>7434.0000</td>
+      <td>8712.0000</td>
+      <td>6590.0000</td>
+      <td>7684.0000</td>
+      <td>10099.0000</td>
+      <td>11228.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'18881'</td>
+      <td>b'30212'</td>
+      <td>b'GA'</td>
+      <td>7000.0000</td>
+      <td>b'0'</td>
+      <td>1974.0000</td>
+    </tr>
+    <tr>
+      <th>72982</th>
+      <td>b'0'</td>
+      <td>1259712000.0000</td>
+      <td>b'ADESA'</td>
+      <td>2006.0000</td>
+      <td>3.0000</td>
+      <td>b'MAZDA'</td>
+      <td>b'MAZDA6'</td>
+      <td>b's'</td>
+      <td>b'4D SEDAN S'</td>
+      <td>b'SILVER'</td>
+      <td>b'AUTO'</td>
+      <td>b'1'</td>
+      <td>b'Alloy'</td>
+      <td>66855.0000</td>
+      <td>b'OTHER ASIAN'</td>
+      <td>b'MEDIUM'</td>
+      <td>b'OTHER'</td>
+      <td>7535.0000</td>
+      <td>8771.0000</td>
+      <td>8638.0000</td>
+      <td>9973.0000</td>
+      <td>7730.0000</td>
+      <td>9102.0000</td>
+      <td>11954.0000</td>
+      <td>13246.0000</td>
+      <td>b'?'</td>
+      <td>b'?'</td>
+      <td>b'18111'</td>
+      <td>b'30212'</td>
+      <td>b'GA'</td>
+      <td>8000.0000</td>
+      <td>b'0'</td>
+      <td>1313.0000</td>
+    </tr>
+  </tbody>
+</table>
+<p>72983 rows × 33 columns</p>
+</div>
+
+``` python
 # Convert object columns from bytes to string datatype
 object_cols = df.select_dtypes(["object"]).columns
 
@@ -120,33 +614,76 @@ for column in object_cols:
 del column
 ```
 
-```{python MissingValues}
-
+``` python
 # Print n. of missing values in each column
 pd.isnull(df).sum()
 ```
 
-```{python TargetBalance}
+    IsBadBuy                                 0
+    PurchDate                                0
+    Auction                                  0
+    VehYear                                  0
+    VehicleAge                               0
+    Make                                     0
+    Model                                    0
+    Trim                                  2360
+    SubModel                                 8
+    Color                                    8
+    Transmission                             9
+    WheelTypeID                           3169
+    WheelType                             3174
+    VehOdo                                   0
+    Nationality                              5
+    Size                                     5
+    TopThreeAmericanName                     5
+    MMRAcquisitionAuctionAveragePrice       18
+    MMRAcquisitionAuctionCleanPrice         18
+    MMRAcquisitionRetailAveragePrice        18
+    MMRAcquisitonRetailCleanPrice           18
+    MMRCurrentAuctionAveragePrice          315
+    MMRCurrentAuctionCleanPrice            315
+    MMRCurrentRetailAveragePrice           315
+    MMRCurrentRetailCleanPrice             315
+    PRIMEUNIT                            69564
+    AUCGUART                             69564
+    BYRNO                                    0
+    VNZIP1                                   0
+    VNST                                     0
+    VehBCost                                68
+    IsOnlineSale                             0
+    WarrantyCost                             0
+    dtype: int64
 
+``` python
 print("Target class (im)balance: ")
 df["IsBadBuy"].value_counts(normalize = True)
 ```
 
-```{python PurchaseDate}
+    Target class (im)balance: 
 
+    IsBadBuy
+    0   0.8770
+    1   0.1230
+    Name: proportion, dtype: float64
+
+``` python
 # Purchase date is in UNIX timestamp format. Convert to datetime
 df["PurchDate"]
 df["PurchDate"] = pd.to_datetime(df["PurchDate"], unit = "s")
 ```
 
-```{python Auction}
-
+``` python
 # 3 unique auctioneers. ADESA, MANHEIM and other. Mostly MANHEIM.
 df["Auction"].value_counts(normalize = True)
 ```
 
-```{python VehYearAge}
+    Auction
+    MANHEIM   0.5624
+    OTHER     0.2398
+    ADESA     0.1978
+    Name: proportion, dtype: float64
 
+``` python
 # Vehicle years range from 2001 to 2010
 df[["VehYear", "VehicleAge"]].describe()
 
@@ -158,8 +695,12 @@ print("\nCases where purchase year - vehicle year = vehicle age: ")
 ((purch_year - veh_year) == df["VehicleAge"]).sum()
 ```
 
-```{python Make}
 
+    Cases where purchase year - vehicle year = vehicle age: 
+
+    72976
+
+``` python
 # There are brands with very few observations.
 df["Make"].value_counts()
 
@@ -167,45 +708,106 @@ df["Make"].value_counts()
 df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
 ```
 
-```{python Model}
-
+``` python
 # There are 1063 unique models, many with only 1 observation.
 df["Model"].value_counts() 
 ```
 
-```{python Trim}
+    Model
+    PT CRUISER              2329
+    IMPALA                  1990
+    TAURUS                  1425
+    CALIBER                 1375
+    CARAVAN GRAND FWD V6    1289
+                            ... 
+    ESCAPE                     1
+    PRIZM 1.8L I-4 SFI D       1
+    CAMRY V6 3.0L / 3.3L       1
+    LHS                        1
+    PATRIOT 2WD 4C 2.0L        1
+    Name: count, Length: 1063, dtype: int64
 
+``` python
 # 134 trims, many with only 1 observation. 2360 missing values.
 df["Trim"].value_counts() 
 ```
 
-```{python SubModel}
+    Trim
+    Bas    13950
+    LS     10174
+    SE      9348
+    SXT     3825
+    LT      3540
+           ...  
+    Har        1
+    LL         1
+    JLX        1
+    JLS        1
+    L 3        1
+    Name: count, Length: 134, dtype: int64
 
+``` python
 # 863 submodels, many with only 1 observation. 8 missing values.
 df["SubModel"].value_counts() 
 ```
 
-```{python ModelSubModel}
+    SubModel
+    4D SEDAN                  15236
+    4D SEDAN LS                4718
+    4D SEDAN SE                3859
+    4D WAGON                   2230
+    MINIVAN 3.3L               1258
+                              ...  
+    EXT CAB 5.4L FX2 SPORT        1
+    2D COUPE ZX5 S                1
+    4D WAGON OUTBACK              1
+    EXT CAB 6.0L SLE              1
+    MINIVAN 3.3L FFV EL           1
+    Name: count, Length: 863, dtype: int64
 
+``` python
 # 2784 unique model & submodel combinations, many with only 1 observation.
 (df["Model"] + " " + df["SubModel"]).value_counts()
 ```
 
-```{python Cars}
+    PT CRUISER 4D SEDAN                            1894
+    IMPALA 4D SEDAN LS                             1300
+    CALIBER 4D WAGON                               1097
+    PT CRUISER 2.4L I4 S 4D SEDAN                   957
+    STRATUS V6 2.7L V6 M 4D SEDAN SXT FFV           770
+                                                   ... 
+    F150 PICKUP 2WD V8 5 REG CAB 5.4L W/T             1
+    VIBE 4D WAGON 2.4L                                1
+    XL-7 4WD 2.7L V6 MPI 4D SPORT UTILITY             1
+    F150 PICKUP 4WD V8 CREW CAB 5.4L KING RANCH       1
+    PATRIOT 2WD 4C 2.0L 4D SUV SPORT                  1
+    Name: count, Length: 2784, dtype: int64
 
+``` python
 # 3000+ unique cars in dataset (some could be different namings / spellings of the same car)
 (df["Model"] + df["Trim"] + df["SubModel"]).value_counts()
 ```
 
-```{python Color}
+    PT CRUISERBas4D SEDAN                          1355
+    IMPALALS4D SEDAN LS                            1300
+    CALIBERSE4D WAGON                               939
+    STRATUS V6 2.7L V6 MSXT4D SEDAN SXT FFV         770
+    TAURUSSE4D SEDAN SE                             761
+                                                   ... 
+    CIVICVP2D COUPE DX VALUE PACKAGE AUTO             1
+    2500 RAM PICKUP 2WDLarQUAD CAB 5.7L LARAMIE       1
+    DURANGO 4WD V8Lim4D SUV 4.7L FFV LIMITED          1
+    LEGACYL4D WAGON L                                 1
+    PATRIOT 2WD 4C 2.0LSpo4D SUV SPORT                1
+    Name: count, Length: 3136, dtype: int64
 
+``` python
 # 8 missing values for color, recode them as NOT AVAIL
 df["Color"].value_counts()
 df.loc[pd.isna(df["Color"]), "Color"] = "NOT AVAIL"
 ```
 
-```{python Transmission}
-
+``` python
 # 9 missing values from transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
 df["Transmission"].value_counts()
 
@@ -213,8 +815,7 @@ df["Transmission"].value_counts()
 df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
 ```
 
-```{python TransmissionNAs}
-
+``` python
 # Work out & impute transmission NAs from car model
 print("Rows with Transmission values missing: ")
 df.loc[pd.isna(df["Transmission"]), ["VehYear", "Make", "Model", "Trim", "SubModel"]]
@@ -224,16 +825,22 @@ transmission_nas = ["AUTO", "MANUAL", "MANUAL", "MANUAL", "AUTO", "MANUAL", "MAN
 df.loc[pd.isna(df["Transmission"]), "Transmission"] = transmission_nas
 ```
 
-```{python Wheel}
+    Rows with Transmission values missing: 
 
+``` python
 # 3169 missing values in WheelTypeID, 3174 in WheelType. Crosscheck these columns.
 df["WheelTypeID"].value_counts()
 print("\n")
 df["WheelType"].value_counts()
 ```
 
-```{python WheelNAs}
+    WheelType
+    Alloy      36050
+    Covers     33004
+    Special      755
+    Name: count, dtype: int64
 
+``` python
 print("N. of WheelTypeID NAs that are also WheelType NAs: " + 
 str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
 )
@@ -242,8 +849,18 @@ print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
 df.loc[df["WheelTypeID"] == "0", "WheelType"]
 ```
 
-```{python WheelIDvsType}
+    N. of WheelTypeID NAs that are also WheelType NAs: 3169
 
+    Remaining 5 rows with WheelType NAs are WheelTypeID = 0: 
+
+    2992     NaN
+    3926     NaN
+    42640    NaN
+    47731    NaN
+    69331    NaN
+    Name: WheelType, dtype: object
+
+``` python
 print("Cases where WheelTypeID 1 = WheelType Alloy: " + str(
   (df.loc[df["WheelTypeID"] == "1", "WheelType"] == "Alloy").sum()
 ))
@@ -257,21 +874,29 @@ print("Cases where WheelTypeID 3 = WheelType Special: " + str(
 ))
 ```
 
-```{python DropWheelID}
+    Cases where WheelTypeID 1 = WheelType Alloy: 36050
+    Cases where WheelTypeID 2 = WheelType Covers: 33004
+    Cases where WheelTypeID 3 = WheelType Special: 755
 
+``` python
 # Recode WheelType NAs as Other, drop WheelTypeID column
 df.loc[pd.isnull(df["WheelType"]), "WheelType"] = "Other"
 df = df.drop("WheelTypeID", axis = 1)
 ```
 
-```{python Nationality}
-
+``` python
 # 5 missing values in Nationality. Work these out from car make. 
 df["Nationality"].value_counts()
 ```
 
-```{python NationalityNAs}
+    Nationality
+    AMERICAN          61028
+    OTHER ASIAN        8033
+    TOP LINE ASIAN     3722
+    OTHER               195
+    Name: count, dtype: int64
 
+``` python
 # Work out the 5 missing Nationality values from make
 print("Makes of rows with missing Nationality values: ")
 df.loc[pd.isnull(df["Nationality"]), "Make"]
@@ -279,14 +904,29 @@ nationality_nas = ["AMERICAN", "AMERICAN", "OTHER ASIAN", "AMERICAN", "AMERICAN"
 df.loc[pd.isnull(df["Nationality"]), "Nationality"] = nationality_nas
 ```
 
-```{python Size}
+    Makes of rows with missing Nationality values: 
 
+``` python
 # 5 missing values in size. Work these out from the model.
 df["Size"].value_counts()
 ```
 
-```{python SizeNAs}
+    Size
+    MEDIUM         30785
+    LARGE           8850
+    MEDIUM SUV      8090
+    COMPACT         7205
+    VAN             5854
+    LARGE TRUCK     3170
+    SMALL SUV       2276
+    SPECIALTY       1915
+    CROSSOVER       1759
+    LARGE SUV       1433
+    SMALL TRUCK      864
+    SPORTS           777
+    Name: count, dtype: int64
 
+``` python
 # Work out the 5 missing Size values from make & model
 print("Rows with Size values missing: ")
 df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]]
@@ -301,15 +941,17 @@ size_nas = ["LARGE TRUCK", "MEDIUM SUV", "MEDIUM", "SMALL SUV", "SMALL SUV"]
 df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
 ```
 
-```{python Top3}
+    Rows with Size values missing: 
 
+    Size values of other rows with same model: 
+
+``` python
 # Unnecessary column, information already incorporated in Make. Drop it
 df["TopThreeAmericanName"].value_counts()
 df = df.drop("TopThreeAmericanName", axis = 1)
 ```
 
-```{python MMR}
-
+``` python
 print("Missing values in MMR columns:")
 pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
        'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
@@ -322,8 +964,9 @@ df = df.drop([
   'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice'], axis = 1)
 ```
 
-```{python MMRZerosOnes}
+    Missing values in MMR columns:
 
+``` python
 # Some MMR values are zero
 print("N. of rows with at least one MMR value of 0:") 
 len(df.loc[
@@ -354,8 +997,10 @@ df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
   (df["MMRAcquisitonRetailCleanPrice"] > 0)].copy()
 ```
 
-```{python PRIMEUNIT}
+    N. of rows with at least one MMR value of 0:
+    N. of rows with at least one MMR value of 1:
 
+``` python
 # 95% missing column. Missing values possibly mean NO. YES means there was unusual
 # demand for the car.
 df["PRIMEUNIT"].value_counts(normalize = True)
@@ -364,8 +1009,7 @@ df["PRIMEUNIT"].value_counts(normalize = True)
 df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
 ```
 
-```{python AUCGUART}
-
+``` python
 # 95% missing column. AUCGUART is the vehicle inspection level at auction. Green
 # means inspected, yellow means partial information available, red means you buy what you see. Could assume yellow for missing values.
 df["AUCGUART"].value_counts(normalize = True)
@@ -374,41 +1018,113 @@ df["AUCGUART"].value_counts(normalize = True)
 df.loc[pd.isnull(df["AUCGUART"]), "AUCGUART"] = "UNKNOWN"
 ```
 
-```{python BYRNO}
-
+``` python
 # BYRNO is buyer no. 74 unique buyers, some with only 1 observation.
 df["BYRNO"].value_counts()
 ```
 
-```{python VNZIP1}
+    BYRNO
+    99761    3896
+    18880    3553
+    835      2951
+    3453     2888
+    22916    2795
+             ... 
+    99741       1
+    1157        1
+    3582        1
+    10425       1
+    1086        1
+    Name: count, Length: 74, dtype: int64
 
+``` python
 # VNZIP1 is zipcode of purchase location, 153 locations, some with only 1 obs.
 df["VNZIP1"].value_counts()
 ```
 
-```{python VNST}
+    VNZIP1
+    32824    3676
+    27542    3368
+    75236    2410
+    74135    2286
+    80022    2097
+             ... 
+    76101       1
+    85248       1
+    85260       1
+    80112       1
+    25071       1
+    Name: count, Length: 153, dtype: int64
 
+``` python
 # VNST is purchase state.
 df["VNST"].value_counts()
 ```
 
-```{python Price}
+    VNST
+    TX    13482
+    FL    10318
+    CA     7009
+    NC     6971
+    AZ     6102
+    CO     4938
+    SC     4232
+    OK     3552
+    GA     2425
+    TN     1737
+    VA     1652
+    MD     1124
+    UT      870
+    PA      806
+    OH      793
+    MO      752
+    AL      684
+    NV      542
+    MS      488
+    IN      486
+    IA      482
+    IL      454
+    LA      347
+    NJ      317
+    WV      291
+    NM      237
+    KY      228
+    OR      208
+    ID      187
+    WA      135
+    NH       97
+    AR       68
+    MN       62
+    NE       26
+    MA       15
+    MI       14
+    NY        6
+    Name: count, dtype: int64
 
+``` python
 # VehBCost is purchase price. 68 missing values, drop these rows. One car has a purchase price of 1.
 df["VehBCost"].describe()
 df = df.dropna(subset = "VehBCost")
 ```
 
-```{python Warranty}
-
+``` python
 # Warranty cost is for 36 months, or until 36k miles
 df["WarrantyCost"].describe()
 ```
 
+    count   72069.0000
+    mean     1276.4975
+    std       597.7557
+    min       462.0000
+    25%       837.0000
+    50%      1169.0000
+    75%      1623.0000
+    max      7498.0000
+    Name: WarrantyCost, dtype: float64
+
 ## Feature engineering
 
-```{python TimeFeatures}
-
+``` python
 # Time features from date: Purchase year, month, day of week
 df["PurchaseYear"] = df["PurchDate"].dt.year
 df["PurchaseMonth"] = df["PurchDate"].dt.month
@@ -416,8 +1132,7 @@ df["PurchaseDay"] = df["PurchDate"].dt.weekday
 df = df.drop("PurchDate", axis = 1)
 ```
 
-```{python EngineDrivetrain}
-
+``` python
 # Engine type features from Model: V6, V8, I4/I-4, 4C, 6C
 df["EngineV6"] = df["Model"].str.contains("V6").astype(int)
 df["EngineV8"] = df["Model"].str.contains("V8").astype(int)
@@ -433,8 +1148,7 @@ df["FWD"] = df["Model"].str.contains("FWD").astype(int)
 df["RWD"] = df["Model"].str.contains("RWD").astype(int)
 ```
 
-```{python Chassis}
-
+``` python
 # Chassis type features from SubModel: WAGON, SEDAN, COUPE, HATCHBACK, CONVERTIBLE
 # Work out and recode these features manually for rows where SubModel is missing
 print("Rows where SubModel is missing:")
@@ -463,8 +1177,9 @@ df.loc[pd.isnull(df["ChassisConvertible"]), "ChassisConvertible"] = False
 df["ChassisConvertible"] = df["ChassisConvertible"].astype(int)
 ```
 
-```{python Doors}
+    Rows where SubModel is missing:
 
+``` python
 # Door type feature from SubModel: 4D
 df["FourDoors"] = df["SubModel"].str.contains("4D")
 
@@ -474,8 +1189,7 @@ df.loc[pd.isnull(df["FourDoors"]), "FourDoors"] = [
 df["FourDoors"] = df["FourDoors"].astype(int)
 ```
 
-```{python ModelSubModel}
-
+``` python
 # Recode SubModel NAs into empty string
 df.loc[pd.isnull(df["SubModel"]), "SubModel"] = ""
 
@@ -486,15 +1200,13 @@ df["ModelSubModel"] = df["Model"] + " " + df["SubModel"]
 df = df.drop(["Trim", "SubModel"], axis = 1)
 ```
 
-```{python MilesPerYear}
-
+``` python
 # Miles per year feature
 df["MilesPerYear"] = df["VehOdo"] / df["VehicleAge"]
 df.loc[df["MilesPerYear"] == np.inf, "MilesPerYear"] = df["VehOdo"] # Replace inf values raised when vehicle age = 0
 ```
 
-```{python Premium}
-
+``` python
 # Premiums / discounts paid on MMR prices: VehBCost - MMR price / MMR price
 df["PremiumAuctionAvg"] = (df["VehBCost"] - df["MMRAcquisitionAuctionAveragePrice"]) / df["MMRAcquisitionAuctionAveragePrice"]
 
@@ -505,8 +1217,7 @@ df["PremiumRetailAvg"] = (df["VehBCost"] - df["MMRAcquisitionRetailAveragePrice"
 df["PremiumRetailClean"] = (df["VehBCost"] - df["MMRAcquisitonRetailCleanPrice"]) / df["MMRAcquisitonRetailCleanPrice"]
 ```
 
-```{python WarrantyRatio}
-
+``` python
 # Warranty ratio to purchase price
 df["WarrantyRatio"] = df["WarrantyCost"] / df["VehBCost"]
 
@@ -515,8 +1226,7 @@ df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = 
 df = df.loc[df["VehBCost"] != 1].copy()
 ```
 
-```{python OneHotEncode}
-
+``` python
 # One hot encode some categoricals in-place
 encoder_onehot = OneHotEncoder(
   drop_last = True, # Create N-1 binary columns to encode N categorical levels
@@ -534,25 +1244,607 @@ df["AUCGUART_RED"] = (df["AUCGUART"] == "RED").astype(int)
 df = df.drop(["PRIMEUNIT", "AUCGUART"], axis = 1)
 ```
 
-```{python CyclicalEncode}
-
+``` python
 # Cyclical encode month and day of week features
 encoder_cyclical = CyclicalFeatures(
   variables = ["PurchaseMonth", "PurchaseDay"], drop_original = True)
 df = encoder_cyclical.fit_transform(df)
 ```
 
-```{python ViewFeatures}
-
+``` python
 # View final feature set before preprocessing
 df.head()
 ```
 
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>IsBadBuy</th>
+      <th>VehicleAge</th>
+      <th>Make</th>
+      <th>Model</th>
+      <th>VehOdo</th>
+      <th>MMRAcquisitionAuctionAveragePrice</th>
+      <th>MMRAcquisitionAuctionCleanPrice</th>
+      <th>MMRAcquisitionRetailAveragePrice</th>
+      <th>MMRAcquisitonRetailCleanPrice</th>
+      <th>BYRNO</th>
+      <th>VNZIP1</th>
+      <th>VNST</th>
+      <th>VehBCost</th>
+      <th>IsOnlineSale</th>
+      <th>WarrantyCost</th>
+      <th>EngineV6</th>
+      <th>EngineV8</th>
+      <th>EngineI4</th>
+      <th>Engine4C</th>
+      <th>Engine6C</th>
+      <th>2WD</th>
+      <th>4WD</th>
+      <th>AWD</th>
+      <th>FWD</th>
+      <th>RWD</th>
+      <th>ChassisWagon</th>
+      <th>ChassisSedan</th>
+      <th>ChassisCoupe</th>
+      <th>ChassisHatch</th>
+      <th>ChassisConvertible</th>
+      <th>FourDoors</th>
+      <th>ModelSubModel</th>
+      <th>MilesPerYear</th>
+      <th>PremiumAuctionAvg</th>
+      <th>PremiumAuctionClean</th>
+      <th>PremiumRetailAvg</th>
+      <th>PremiumRetailClean</th>
+      <th>WarrantyRatio</th>
+      <th>Auction_ADESA</th>
+      <th>Auction_OTHER</th>
+      <th>VehYear_2006.0</th>
+      <th>VehYear_2004.0</th>
+      <th>VehYear_2005.0</th>
+      <th>VehYear_2007.0</th>
+      <th>VehYear_2001.0</th>
+      <th>VehYear_2003.0</th>
+      <th>VehYear_2002.0</th>
+      <th>VehYear_2008.0</th>
+      <th>VehYear_2009.0</th>
+      <th>Color_RED</th>
+      <th>Color_WHITE</th>
+      <th>Color_MAROON</th>
+      <th>Color_SILVER</th>
+      <th>Color_BLACK</th>
+      <th>Color_GOLD</th>
+      <th>Color_GREY</th>
+      <th>Color_BLUE</th>
+      <th>Color_BEIGE</th>
+      <th>Color_PURPLE</th>
+      <th>Color_ORANGE</th>
+      <th>Color_GREEN</th>
+      <th>Color_BROWN</th>
+      <th>Color_YELLOW</th>
+      <th>Color_NOT AVAIL</th>
+      <th>Transmission_AUTO</th>
+      <th>WheelType_Alloy</th>
+      <th>WheelType_Covers</th>
+      <th>WheelType_Other</th>
+      <th>Nationality_OTHER ASIAN</th>
+      <th>Nationality_AMERICAN</th>
+      <th>Nationality_TOP LINE ASIAN</th>
+      <th>Size_MEDIUM</th>
+      <th>Size_LARGE TRUCK</th>
+      <th>Size_COMPACT</th>
+      <th>Size_LARGE</th>
+      <th>Size_VAN</th>
+      <th>Size_MEDIUM SUV</th>
+      <th>Size_LARGE SUV</th>
+      <th>Size_SPECIALTY</th>
+      <th>Size_SPORTS</th>
+      <th>Size_CROSSOVER</th>
+      <th>Size_SMALL SUV</th>
+      <th>PurchaseYear_2009</th>
+      <th>PRIMEUNIT_YES</th>
+      <th>PRIMEUNIT_NO</th>
+      <th>AUCGUART_GREEN</th>
+      <th>AUCGUART_RED</th>
+      <th>PurchaseMonth_sin</th>
+      <th>PurchaseMonth_cos</th>
+      <th>PurchaseDay_sin</th>
+      <th>PurchaseDay_cos</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>3.0000</td>
+      <td>MAZDA</td>
+      <td>MAZDA3</td>
+      <td>89046.0000</td>
+      <td>8155.0000</td>
+      <td>9829.0000</td>
+      <td>11636.0000</td>
+      <td>13600.0000</td>
+      <td>21973</td>
+      <td>33619</td>
+      <td>FL</td>
+      <td>7100.0000</td>
+      <td>0</td>
+      <td>1113.0000</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>MAZDA3 4D SEDAN I</td>
+      <td>29682.0000</td>
+      <td>-0.1294</td>
+      <td>-0.2776</td>
+      <td>-0.3898</td>
+      <td>-0.4779</td>
+      <td>0.1568</td>
+      <td>1</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>-0.0000</td>
+      <td>1.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>0</td>
+      <td>5.0000</td>
+      <td>DODGE</td>
+      <td>1500 RAM PICKUP 2WD</td>
+      <td>93593.0000</td>
+      <td>6854.0000</td>
+      <td>8383.0000</td>
+      <td>10897.0000</td>
+      <td>12572.0000</td>
+      <td>19638</td>
+      <td>33619</td>
+      <td>FL</td>
+      <td>7600.0000</td>
+      <td>0</td>
+      <td>1053.0000</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1500 RAM PICKUP 2WD QUAD CAB 4.7L SLT</td>
+      <td>18718.6000</td>
+      <td>0.1088</td>
+      <td>-0.0934</td>
+      <td>-0.3026</td>
+      <td>-0.3955</td>
+      <td>0.1386</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>-0.0000</td>
+      <td>1.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>0</td>
+      <td>4.0000</td>
+      <td>DODGE</td>
+      <td>STRATUS V6</td>
+      <td>73807.0000</td>
+      <td>3202.0000</td>
+      <td>4760.0000</td>
+      <td>6943.0000</td>
+      <td>8457.0000</td>
+      <td>19638</td>
+      <td>33619</td>
+      <td>FL</td>
+      <td>4900.0000</td>
+      <td>0</td>
+      <td>1389.0000</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>STRATUS V6 4D SEDAN SXT FFV</td>
+      <td>18451.7500</td>
+      <td>0.5303</td>
+      <td>0.0294</td>
+      <td>-0.2943</td>
+      <td>-0.4206</td>
+      <td>0.2835</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>-0.0000</td>
+      <td>1.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>0</td>
+      <td>5.0000</td>
+      <td>DODGE</td>
+      <td>NEON</td>
+      <td>65617.0000</td>
+      <td>1893.0000</td>
+      <td>2675.0000</td>
+      <td>4658.0000</td>
+      <td>5690.0000</td>
+      <td>19638</td>
+      <td>33619</td>
+      <td>FL</td>
+      <td>4100.0000</td>
+      <td>0</td>
+      <td>630.0000</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>NEON 4D SEDAN</td>
+      <td>13123.4000</td>
+      <td>1.1659</td>
+      <td>0.5327</td>
+      <td>-0.1198</td>
+      <td>-0.2794</td>
+      <td>0.1537</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>-0.0000</td>
+      <td>1.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>0</td>
+      <td>4.0000</td>
+      <td>FORD</td>
+      <td>FOCUS</td>
+      <td>69367.0000</td>
+      <td>3913.0000</td>
+      <td>5054.0000</td>
+      <td>7723.0000</td>
+      <td>8707.0000</td>
+      <td>19638</td>
+      <td>33619</td>
+      <td>FL</td>
+      <td>4000.0000</td>
+      <td>0</td>
+      <td>1020.0000</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>FOCUS 2D COUPE ZX3</td>
+      <td>17341.7500</td>
+      <td>0.0222</td>
+      <td>-0.2085</td>
+      <td>-0.4821</td>
+      <td>-0.5406</td>
+      <td>0.2550</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>-0.0000</td>
+      <td>1.0000</td>
+      <td>0.0000</td>
+      <td>1.0000</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
 ## Preprocessing pipeline
 
-```{python TrainTestSplit}
-
-
+``` python
 # Split target and features
 y = df["IsBadBuy"].astype(int)
 x = df.drop("IsBadBuy", axis = 1)
@@ -564,8 +1856,7 @@ x_train, x_test, y_train, y_test = train_test_split(
   )
 ```
 
-```{python TargetEncoders}
-
+``` python
 # Target encoder: ModelSubModel encoded with Model, Make hierarchy
 hier_submodels = pd.DataFrame(x[["Make", "Model"]]).rename({
   "Make": "HIER_ModelSubModel_1", # Make as first (top) level of hierarchy
@@ -591,8 +1882,7 @@ encode_target_zip = TargetEncoder(cols = ["VNZIP1"], hierarchy = hier_states)
 encode_target = TargetEncoder(cols = ["Make", "BYRNO", "VNST"])
 ```
 
-```{python Pipeline}
-
+``` python
 # Scaling method
 scaler_minmax = MinMaxScaler()
 
@@ -621,12 +1911,10 @@ Watch out for conflicts in variable names.
 
 ### Logistic regression with SGD
 
-```{python ValLogistic}
-#| code-fold: true
-#| code-summary: "Show validation function definition"
-#| eval: false
+<details>
+<summary>Show validation function definition</summary>
 
-
+``` python
 # Define model validation function for logistic regression trained with SGD
 def validate_logistic(
   alpha, # Regularization strength hyperparameter
@@ -737,9 +2025,9 @@ def validate_logistic(
     return best_epochs
 ```
 
-```{python ObjLogistic}
-#| eval: false
+</details>
 
+``` python
 # Define objective function for hyperparameter tuning with Optuna
 def objective_logistic(trial):
   
@@ -756,9 +2044,7 @@ def objective_logistic(trial):
   return mean_cv_score
 ```
 
-```{python StudyLogistic}
-#| eval: false
-
+``` python
 # Create Optuna study
 study_logistic = optuna.create_study(
   sampler = optuna.samplers.TPESampler(seed = 1923),
@@ -768,9 +2054,7 @@ study_logistic = optuna.create_study(
 )
 ```
 
-```{python OptimizeLogistic}
-#| eval: false
-
+``` python
 # Optimize Optuna
 study_logistic.optimize(
   objective_logistic, 
@@ -778,24 +2062,33 @@ study_logistic.optimize(
   show_progress_bar = True)
 ```
 
-```{python ExportTrialsLogistic}
-#| eval: false
-
+``` python
 # Retrieve and export trials
 trials_logistic = study_logistic.trials_dataframe().sort_values("value", ascending = True)
 trials_logistic.to_csv("./ModifiedData/trials_logistic.csv", index = False)
 ```
 
-```{python ImportBestLogistic}
-
+``` python
 # Import best trial
 best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
 best_trial_logistic
 ```
 
-```{python ValEpochsLogistic}
-#| eval: false
+    number                                                  410
+    value                                                0.5715
+    datetime_start                   2023-05-02 14:28:47.226686
+    datetime_complete                2023-05-02 14:28:48.467812
+    duration                             0 days 00:00:01.241126
+    params_l1_ratio                                      0.0171
+    params_reg_strength                                  0.0025
+    system_attrs_completed_rung_0                        0.5720
+    system_attrs_completed_rung_1                        0.5716
+    system_attrs_completed_rung_2                        0.5715
+    system_attrs_completed_rung_3                           NaN
+    state                                                PRUNED
+    Name: 0, dtype: object
 
+``` python
 # Retrieve best number of epochs for optimal parameters, for each CV fold
 best_epochs = validate_logistic(
   alpha = best_trial_logistic["params_reg_strength"],
@@ -804,8 +2097,7 @@ best_epochs = validate_logistic(
   )
 ```
 
-```{python FinalModelLogistic}
-
+``` python
 # Create pipeline with final logistic regression model
 pipe_logistic = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
@@ -826,12 +2118,10 @@ pipe_logistic = Pipeline(steps = [
 
 ### Support vector machine with SGD
 
-```{python ValSVM}
-#| code-fold: true
-#| code-summary: "Show validation function definition"
-#| eval: false
+<details>
+<summary>Show validation function definition</summary>
 
-
+``` python
 # Define model validation function for SVM
 def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
   
@@ -948,12 +2238,11 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
     return best_epochs
 ```
 
-```{python ObjSVM}
-#| code-fold: true
-#| code-summary: "Show Optuna objective function"
-#| eval: false
+</details>
+<details>
+<summary>Show Optuna objective function</summary>
 
-
+``` python
 # Define objective function for hyperparameter tuning
 def objective_svm(trial):
   
@@ -968,15 +2257,29 @@ def objective_svm(trial):
   return mean_cv_score
 ```
 
-```{python ImportBestSVM}
+</details>
 
+``` python
 # Import best trial
 best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
 best_trial_svm
 ```
 
-```{python FinalModelSVM}
+    number                                                  455
+    value                                                0.7376
+    datetime_start                   2023-05-02 14:47:52.981510
+    datetime_complete                2023-05-02 14:47:54.260575
+    duration                             0 days 00:00:01.279065
+    params_l1_ratio                                      0.1338
+    params_reg_strength                                  0.0004
+    system_attrs_completed_rung_0                        0.7415
+    system_attrs_completed_rung_1                        0.7388
+    system_attrs_completed_rung_2                        0.7376
+    system_attrs_completed_rung_3                           NaN
+    state                                                PRUNED
+    Name: 0, dtype: object
 
+``` python
 # Create pipeline with final SVM model
 pipe_svm = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
@@ -1005,12 +2308,10 @@ pipe_svm = Pipeline(steps = [
 
 ### XGBoost
 
-```{python ValXGB}
-#| code-fold: true
-#| code-summary: "Show validation function definition"
-#| eval: false
+<details>
+<summary>Show validation function definition</summary>
 
-
+``` python
 # Define model validation function for XGBoost
 def validate_xgb(
   params_dict, # Dictionary of hyperparameter values
@@ -1093,10 +2394,9 @@ def validate_xgb(
     return best_epochs 
 ```
 
-```{python ObjXGB}
-#| eval: false
+</details>
 
-
+``` python
 # Define objective function for hyperparameter tuning
 def objective_xgb(trial):
   
@@ -1129,15 +2429,33 @@ def objective_xgb(trial):
   return mean_cv_score
 ```
 
-```{python ImportBestXGB}
-
+``` python
 # Import best trial
 best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
 best_trial_xgb
 ```
 
-```{python FinalModelXGB}
+    number                                                  532
+    value                                                0.5659
+    datetime_start                   2023-05-02 16:17:38.567094
+    datetime_complete                2023-05-02 16:17:42.487305
+    duration                             0 days 00:00:03.920211
+    params_colsample_bytree                              0.4221
+    params_gamma                                         0.0008
+    params_l1_reg                                        0.0610
+    params_l2_reg                                        0.8958
+    params_learning_rate                                 0.2300
+    params_max_depth                                          5
+    params_min_child_weight                                   8
+    params_subsample                                     0.9662
+    system_attrs_completed_rung_0                        0.5708
+    system_attrs_completed_rung_1                        0.5703
+    system_attrs_completed_rung_2                           NaN
+    system_attrs_completed_rung_3                           NaN
+    state                                              COMPLETE
+    Name: 0, dtype: object
 
+``` python
 # Create pipeline with final XGB model
 pipe_xgb = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
@@ -1167,11 +2485,10 @@ pipe_xgb = Pipeline(steps = [
 
 #### Defining PyTorch Lightning classes
 
-```{python ClassDataset}
-#| code-fold: true
-#| code-summary: "Show Dataset class creation"
+<details>
+<summary>Show Dataset class creation</summary>
 
-
+``` python
 # Define TrainDataset class: Takes in preprocessed features & targets
 class TrainDataset(torch.utils.data.Dataset):
   
@@ -1209,11 +2526,11 @@ class TestDataset(torch.utils.data.Dataset):
     return self.x[idx]
 ```
 
-```{python ClassModule}
-#| code-fold: true
-#| code-summary: "Show Lightning Module class creation"
+</details>
+<details>
+<summary>Show Lightning Module class creation</summary>
 
-
+``` python
 # Define Lightning module
 class SeluDropoutModel(pl.LightningModule):
   
@@ -1359,25 +2676,25 @@ class SeluDropoutModel(pl.LightningModule):
     }
 ```
 
-```{python ClassPruner}
-#| code-fold: true
-#| code-summary: "Show Optuna pruner creation"
+</details>
+<details>
+<summary>Show Optuna pruner creation</summary>
 
-
+``` python
 # Optuna code uses pytorch_lightning namespace which causes an error with the pruning callback. Create copy of Optuna pruning callback with lightning.pytorch namespace as a workaround.
 class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 ```
 
+</details>
+
 #### Hyperparameter tuning
 
-```{python ValNN}
-#| code-fold: true
-#| code-summary: "Show validation function definition"
-#| eval: false
+<details>
+<summary>Show validation function definition</summary>
 
-
+``` python
 # Define validation function for NN
 def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
   
@@ -1473,10 +2790,9 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
     return best_epochs
 ```
 
-```{python ObjNN}
-#| eval: false
+</details>
 
-
+``` python
 # Define Optuna objective
 def objective_nn(trial):
   
@@ -1507,9 +2823,7 @@ def objective_nn(trial):
   return mean_cv_score
 ```
 
-```{python StudyNN}
-#| eval: false
-
+``` python
 # Create study
 study_nn = optuna.create_study(
   sampler = optuna.samplers.TPESampler(seed = 1923),
@@ -1519,15 +2833,32 @@ study_nn = optuna.create_study(
 )
 ```
 
-```{python ImportBestNN}
-
+``` python
 # Import best trial
 best_trial_nn = pd.read_csv("./ModifiedData/trials_nn.csv").iloc[0,]
 best_trial_nn
 ```
 
-```{python FinalModelNN}
+    number                                                  484
+    value                                                0.4512
+    datetime_start                   2023-05-03 13:30:48.531183
+    datetime_complete                2023-05-03 13:30:55.131208
+    duration                             0 days 00:00:06.600025
+    params_dropout                                       0.1245
+    params_hidden_size                                        4
+    params_l2                                            0.0001
+    params_learning_rate                                 0.0232
+    params_loss_alpha                                    0.2065
+    params_loss_gamma                                    2.3612
+    params_n_hidden_layers                                    2
+    system_attrs_completed_rung_0                        0.4403
+    system_attrs_completed_rung_1                        0.4512
+    system_attrs_completed_rung_2                           NaN
+    system_attrs_completed_rung_3                           NaN
+    state                                                PRUNED
+    Name: 0, dtype: object
 
+``` python
 # Define NN model with best parameters (n. epochs is determined later in Trainer)
 hyperparams_dict = {
       "input_size": 90,
@@ -1546,8 +2877,7 @@ model_nn = SeluDropoutModel(hyperparams_dict)
 
 ### Training & prediction with final models
 
-```{python ClassWeights}
-
+``` python
 # Compute class weight & sample weight vectors
 classes = list(set(y_train))
 class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
@@ -1555,8 +2885,7 @@ sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 ```
 
-```{python ModelDict}
-
+``` python
 # Create dummy classifier which always predicts the prior class probabilities
 model_dummy = DummyClassifier(strategy = "prior")
 
@@ -1570,12 +2899,10 @@ models_dict = {
 }
 ```
 
-```{python TrainPredict}
-#| code-fold: true
-#| code-summary: "Show training & prediction loop"
-#| output: false
+<details>
+<summary>Show training & prediction loop</summary>
 
-
+``` python
 # Train & predict with each model
 preds_dict = {}
 
@@ -1640,13 +2967,14 @@ for key in models_dict.keys():
     preds_dict[key] = y_prob
 ```
 
+</details>
+
 ### Calculating performance metrics
 
-```{python StaticMetrics}
-#| code-fold: true
-#| code-summary: "Show static metric calculations"
+<details>
+<summary>Show static metric calculations</summary>
 
-
+``` python
 # Retrieve AP & Brier scores (weighted) for each model
 scores_avg_precision = {}
 scores_brier = {}
@@ -1672,11 +3000,11 @@ for key in preds_dict.keys():
   scores_brier_skill[key] = brier_skill
 ```
 
-```{python DynamicMetrics}
-#| code-fold: true
-#| code-summary: "Show dynamic metric calculations"
+</details>
+<details>
+<summary>Show dynamic metric calculations</summary>
 
-
+``` python
 # Retrieve F1 scores at different thresholds for each model
 scores_f1 = {}
 scores_f1_best = {}
@@ -1711,12 +3039,14 @@ for key in preds_dict.keys():
   threshold_probs_best[key] = thresholds[np.argmax(f1_scores)]
 ```
 
+</details>
+
 ### Summary table of performance metrics
 
-```{python GetSummaryData}
-#| code-fold: true
-#| code-summary: "Show code to get summary table"
+<details>
+<summary>Show code to get summary table</summary>
 
+``` python
 # Retrieve dataframe of scores
 df_scores = pd.DataFrame(
   {
@@ -1732,12 +3062,95 @@ df_scores = pd.DataFrame(
 df_scores
 ```
 
+</details>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Avg. precision (PRAUC)</th>
+      <th>Brier score (class weighted)</th>
+      <th>Brier skill score (class weighted)</th>
+      <th>Best F1 score</th>
+      <th>Precision at best F1</th>
+      <th>Recall at best F1</th>
+      <th>Threshold prob. at best F1</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>Dummy</th>
+      <td>0.1226</td>
+      <td>0.3925</td>
+      <td>0.0000</td>
+      <td>0.2184</td>
+      <td>0.1226</td>
+      <td>1.0000</td>
+      <td>0.1226</td>
+    </tr>
+    <tr>
+      <th>Logistic</th>
+      <td>0.4167</td>
+      <td>0.1959</td>
+      <td>0.5009</td>
+      <td>0.4069</td>
+      <td>0.4310</td>
+      <td>0.3854</td>
+      <td>0.6338</td>
+    </tr>
+    <tr>
+      <th>SVM</th>
+      <td>0.3437</td>
+      <td>0.2098</td>
+      <td>0.4655</td>
+      <td>0.3696</td>
+      <td>0.3495</td>
+      <td>0.3922</td>
+      <td>0.6537</td>
+    </tr>
+    <tr>
+      <th>XGBoost</th>
+      <td>0.4674</td>
+      <td>0.1920</td>
+      <td>0.5109</td>
+      <td>0.4225</td>
+      <td>0.4434</td>
+      <td>0.4035</td>
+      <td>0.6432</td>
+    </tr>
+    <tr>
+      <th>Neural net</th>
+      <td>0.4337</td>
+      <td>0.3138</td>
+      <td>0.2004</td>
+      <td>0.3966</td>
+      <td>0.3766</td>
+      <td>0.4188</td>
+      <td>0.1855</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
 ### Precision - recall curves
 
-```{python PlotPRCCurves}
-#| code-fold: true
-#| code-summary: "Show code to plot PRC curves"
+<details>
+<summary>Show code to plot PRC curves</summary>
 
+``` python
 # Plot precision-recall curves
 fig, ax = plt.subplots()
 for key in preds_dict.keys():
@@ -1748,13 +3161,16 @@ plt.show()
 plt.close("all")
 ```
 
+</details>
+
+![](Report_files/figure-commonmark/cell-82-output-1.png)
+
 ### F1 score - precision - recall plots
 
-```{python GetF1Dataframes}
-#| code-fold: true
-#| code-summary: "Show code to get F1 plots dataframes"
+<details>
+<summary>Show code to get F1 plots dataframes</summary>
 
-
+``` python
 # Get dataframes for F1 score - threshold prob plots
 
 # Logistic
@@ -1814,10 +3230,11 @@ df_f1_nn = pd.DataFrame(
   )
 ```
 
-```{python PlotF1Scores}
-#| code-fold: true
-#| code-summary: "Show code to plot F1 scores"
+</details>
+<details>
+<summary>Show code to plot F1 scores</summary>
 
+``` python
 # Plot F1 score - threshold prob. plots
 fig, ax = plt.subplots(4, sharex = True, sharey = True)
 _ = fig.suptitle("F1 - precision - recall scores across threshold probabilities")
@@ -1853,12 +3270,16 @@ plt.show()
 plt.close("all")
 ```
 
+</details>
+
+![](Report_files/figure-commonmark/cell-84-output-1.png)
+
 ### Predicted probability distributions
 
-```{python GetProbDistDataframes}
-#| code-fold: true
-#| code-summary: "Show code to get predicted prob. dataframes"
+<details>
+<summary>Show code to get predicted prob. dataframes</summary>
 
+``` python
 # Get dataframes for predicted probability plots
 
 # Logistic
@@ -1886,10 +3307,11 @@ df_preds_nn = pd.DataFrame({
 })
 ```
 
-```{python PlotProbDist}
-#| code-fold: true
-#| code-summary: "Show code to plot predicted prob. distributions"
+</details>
+<details>
+<summary>Show code to plot predicted prob. distributions</summary>
 
+``` python
 # Plot predicted probability distributions of classifiers
 fig, ax = plt.subplots(4, sharex = True, sharey = True)
 _ = fig.suptitle("Distributions of positive class probability predictions")
@@ -1941,17 +3363,21 @@ plt.show()
 plt.close("all")
 ```
 
+</details>
+
+![](Report_files/figure-commonmark/cell-86-output-1.png)
+
 ## Sensitivity analysis
 
 ### Problem formulation
 
 ### Calculations
 
-```{python GetAnalysisInputs}
-#| code-fold: true
-#| code-summary: "Show code to get sensitivity analysis input dataframes"
+<details>
+<summary>Show code to get sensitivity analysis input
+dataframes</summary>
 
-
+``` python
 # Retrieve prob. predictions, target labels, purchase prices in dataframes, sort in
 # descending order according to prob. predictions
 
@@ -1996,10 +3422,11 @@ df_nn = pd.DataFrame({
 df_nn = df_nn.sort_values("ProbKick", ascending = True)
 ```
 
-```{python DefineProfitFunction}
-#| code-fold: true
-#| code-summary: "Show code to define profit-loss calculation function"
+</details>
+<details>
+<summary>Show code to define profit-loss calculation function</summary>
 
+``` python
 # Define function to calculate profit-loss, given threshold probability, number of
 # cars to purchase and probability predictions
 def calc_profit(threshold, num_purchases, df_probs):
@@ -2024,11 +3451,11 @@ def calc_profit(threshold, num_purchases, df_probs):
   return sum(decision), sum(profit)
 ```
 
-```{python CalculateProfits}
-#| code-fold: true
-#| code-summary: "Show code to calculate profit-loss values"
+</details>
+<details>
+<summary>Show code to calculate profit-loss values</summary>
 
-
+``` python
 # Get combinations of thresholds - n. of cars to purchase
 thresholds = np.arange(0, 1, 0.01) # 100 Threshold probabilities
 num_buys = np.arange(0, len(y_test), 100) # 100 values for n. cars to purchase
@@ -2116,12 +3543,14 @@ df_long = pd.concat(
 df_long = df_long.drop_duplicates(["Purchases", "Profits", "Model"])
 ```
 
+</details>
+
 ### Plots and quasi-optimal solutions
 
-```{python PlotSensitivity}
-#| code-fold: true
-#| code-summary: "Show code to plot sensitivity analysis"
+<details>
+<summary>Show code to plot sensitivity analysis</summary>
 
+``` python
 # 2D lineplots of thresholds-purchases-profits
 fig, ax = plt.subplots(3)
 _ = fig.suptitle("Sensitivity analysis of classifier threshold probability, number of cars purchased and profit")
@@ -2147,10 +3576,14 @@ plt.show()
 plt.close("all")
 ```
 
-```{python OptimalSolutions}
-#| code-fold: true
-#| code-summary: "Show code to retrieve quasi-optimal solutions"
+</details>
 
+![](Report_files/figure-commonmark/cell-90-output-1.png)
+
+<details>
+<summary>Show code to retrieve quasi-optimal solutions</summary>
+
+``` python
 # Quasi-optimal combinations of threshold prob - n. purchases
 optimal_dummy = df_long_dummy.loc[np.argmax(df_long_dummy["Profits"])]
 optimal_logistic = df_long_logistic.loc[np.argmax(df_long_logistic["Profits"])]
@@ -2175,5 +3608,70 @@ df_optimal = df_optimal.rename({
 
 df_optimal
 ```
+
+</details>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Threshold prob.</th>
+      <th>N. cars purchased</th>
+      <th>Profits, $mil</th>
+      <th>Model</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>1888</th>
+      <td>0.1300</td>
+      <td>300</td>
+      <td>0.0246</td>
+      <td>Dummy</td>
+    </tr>
+    <tr>
+      <th>6916</th>
+      <td>0.4700</td>
+      <td>10100</td>
+      <td>3.2831</td>
+      <td>Logistic</td>
+    </tr>
+    <tr>
+      <th>7641</th>
+      <td>0.5200</td>
+      <td>10100</td>
+      <td>2.7828</td>
+      <td>SVM</td>
+    </tr>
+    <tr>
+      <th>6911</th>
+      <td>0.4700</td>
+      <td>9600</td>
+      <td>3.2962</td>
+      <td>XGBoost</td>
+    </tr>
+    <tr>
+      <th>2562</th>
+      <td>0.1700</td>
+      <td>9700</td>
+      <td>3.1537</td>
+      <td>Neural net</td>
+    </tr>
+  </tbody>
+</table>
+</div>
 
 ## Conclusions
