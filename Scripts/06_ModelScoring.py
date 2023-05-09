@@ -140,7 +140,7 @@ models_dict = {
 }
 
 
-# Train & predict each model
+# Train & predict with each model
 preds_dict = {}
 
 for key in models_dict.keys():
