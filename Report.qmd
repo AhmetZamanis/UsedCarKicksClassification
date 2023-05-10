@@ -101,7 +101,7 @@ raw_data = loadarff("./RawData/kick.arff")
 df = pd.DataFrame(raw_data[0])
 
 # Print first & last 5 rows, all columns
-df
+print(df)
 ```
 
 ```{python ConvertColumns}
@@ -148,20 +148,19 @@ df["Auction"].value_counts(normalize = True)
 ```{python VehYearAge}
 
 # Vehicle years range from 2001 to 2010
-df[["VehYear", "VehicleAge"]].describe()
+print(df[["VehYear", "VehicleAge"]].describe())
 
 # Purchase age almost always matches PurchYear - VehYear.
 purch_year = df["PurchDate"].dt.year
 veh_year = df["VehYear"]
 
-print("\nCases where purchase year - vehicle year = vehicle age: ")
-((purch_year - veh_year) == df["VehicleAge"]).sum()
+print("\nCases where purchase year - vehicle year = vehicle age: " + str(((purch_year - veh_year) == df["VehicleAge"]).sum()))
 ```
 
 ```{python Make}
 
 # There are brands with very few observations.
-df["Make"].value_counts()
+print(df["Make"].value_counts())
 
 # Recode TOYOTA SCION into SCION
 df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
@@ -200,14 +199,14 @@ df["SubModel"].value_counts()
 ```{python Color}
 
 # 8 missing values for color, recode them as NOT AVAIL
-df["Color"].value_counts()
+print(df["Color"].value_counts())
 df.loc[pd.isna(df["Color"]), "Color"] = "NOT AVAIL"
 ```
 
 ```{python Transmission}
 
 # 9 missing values from transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
-df["Transmission"].value_counts()
+print(df["Transmission"].value_counts())
 
 # Replace "Manual" with MANUAL in transmission
 df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
@@ -217,7 +216,7 @@ df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
 
 # Work out & impute transmission NAs from car model
 print("Rows with Transmission values missing: ")
-df.loc[pd.isna(df["Transmission"]), ["VehYear", "Make", "Model", "Trim", "SubModel"]]
+print(df.loc[pd.isna(df["Transmission"]), ["VehYear", "Make", "Model", "Trim", "SubModel"]])
 
 transmission_nas = ["AUTO", "MANUAL", "MANUAL", "MANUAL", "AUTO", "MANUAL", "MANUAL", "AUTO", "AUTO"]
   
@@ -227,9 +226,9 @@ df.loc[pd.isna(df["Transmission"]), "Transmission"] = transmission_nas
 ```{python Wheel}
 
 # 3169 missing values in WheelTypeID, 3174 in WheelType. Crosscheck these columns.
-df["WheelTypeID"].value_counts()
+print(df["WheelTypeID"].value_counts())
 print("\n")
-df["WheelType"].value_counts()
+print(df["WheelType"].value_counts())
 ```
 
 ```{python WheelNAs}
@@ -238,7 +237,7 @@ print("N. of WheelTypeID NAs that are also WheelType NAs: " +
 str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
 )
 
-print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
+print("Remaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
 df.loc[df["WheelTypeID"] == "0", "WheelType"]
 ```
 
@@ -274,7 +273,7 @@ df["Nationality"].value_counts()
 
 # Work out the 5 missing Nationality values from make
 print("Makes of rows with missing Nationality values: ")
-df.loc[pd.isnull(df["Nationality"]), "Make"]
+print(df.loc[pd.isnull(df["Nationality"]), "Make"])
 nationality_nas = ["AMERICAN", "AMERICAN", "OTHER ASIAN", "AMERICAN", "AMERICAN"]
 df.loc[pd.isnull(df["Nationality"]), "Nationality"] = nationality_nas
 ```
@@ -289,13 +288,13 @@ df["Size"].value_counts()
 
 # Work out the 5 missing Size values from make & model
 print("Rows with Size values missing: ")
-df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]]
+print(df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]])
 
 print("\nSize values of other rows with same model: ")
-df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0]
-df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0]
-df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0]
-df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0]
+print(df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
+df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
+df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0] + "\n" +
+df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0])
 
 size_nas = ["LARGE TRUCK", "MEDIUM SUV", "MEDIUM", "SMALL SUV", "SMALL SUV"]
 df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
@@ -304,17 +303,17 @@ df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
 ```{python Top3}
 
 # Unnecessary column, information already incorporated in Make. Drop it
-df["TopThreeAmericanName"].value_counts()
+print(df["TopThreeAmericanName"].value_counts())
 df = df.drop("TopThreeAmericanName", axis = 1)
 ```
 
 ```{python MMR}
 
 print("Missing values in MMR columns:")
-pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
+print(pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
        'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
        'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
-       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum()
+       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum())
        
 # Drop current MMR prices to make the exercise more realistic
 df = df.drop([
@@ -325,22 +324,24 @@ df = df.drop([
 ```{python MMRZerosOnes}
 
 # Some MMR values are zero
-print("N. of rows with at least one MMR value of 0:") 
-len(df.loc[
-  (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
-  (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
-  (df["MMRAcquisitionRetailAveragePrice"] == 0) |
-  (df["MMRAcquisitonRetailCleanPrice"] == 0)
-  ])
+print("N. of rows with at least one MMR value of 0: " + 
+      str(len(df.loc[
+        (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
+        (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
+        (df["MMRAcquisitionRetailAveragePrice"] == 0) |
+        (df["MMRAcquisitonRetailCleanPrice"] == 0)
+        ]))) 
+
 
 # Some MMR values are one
-print("N. of rows with at least one MMR value of 1:") 
-len(df.loc[
-  (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
-  (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
-  (df["MMRAcquisitionRetailAveragePrice"] == 1) |
-  (df["MMRAcquisitonRetailCleanPrice"] == 1)
-  ])
+print("N. of rows with at least one MMR value of 1: " + 
+      str(len(df.loc[
+        (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
+        (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
+        (df["MMRAcquisitionRetailAveragePrice"] == 1) |
+        (df["MMRAcquisitonRetailCleanPrice"] == 1)
+       ]))) 
+
   
 # Drop rows with NAs in MMR
 df = df.dropna(subset = [
@@ -358,7 +359,7 @@ df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
 
 # 95% missing column. Missing values possibly mean NO. YES means there was unusual
 # demand for the car.
-df["PRIMEUNIT"].value_counts(normalize = True)
+print(df["PRIMEUNIT"].value_counts(normalize = True))
 
 # Fill NAs in PRIMEUNIT with UNKNOWN.
 df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
@@ -368,7 +369,7 @@ df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
 
 # 95% missing column. AUCGUART is the vehicle inspection level at auction. Green
 # means inspected, yellow means partial information available, red means you buy what you see. Could assume yellow for missing values.
-df["AUCGUART"].value_counts(normalize = True)
+print(df["AUCGUART"].value_counts(normalize = True))
 
 # Fill NAs in AUCGUART with UNKNOWN.
 df.loc[pd.isnull(df["AUCGUART"]), "AUCGUART"] = "UNKNOWN"
@@ -438,7 +439,7 @@ df["RWD"] = df["Model"].str.contains("RWD").astype(int)
 # Chassis type features from SubModel: WAGON, SEDAN, COUPE, HATCHBACK, CONVERTIBLE
 # Work out and recode these features manually for rows where SubModel is missing
 print("Rows where SubModel is missing:")
-df.loc[pd.isnull(df["SubModel"]), "Model"]
+print(df.loc[pd.isnull(df["SubModel"]), "Model"])
 
 df["ChassisWagon"] = df["SubModel"].str.contains("WAGON")
 df.loc[pd.isnull(df["ChassisWagon"]), "ChassisWagon"] = [
@@ -511,7 +512,7 @@ df["PremiumRetailClean"] = (df["VehBCost"] - df["MMRAcquisitonRetailCleanPrice"]
 df["WarrantyRatio"] = df["WarrantyCost"] / df["VehBCost"]
 
 # The observation with purchase price = 1 skews the WarrantyRatio feature greatly. Drop it.
-df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = False).iloc[0]
+print(df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = False).iloc[0])
 df = df.loc[df["VehBCost"] != 1].copy()
 ```
 
@@ -545,7 +546,7 @@ df = encoder_cyclical.fit_transform(df)
 ```{python ViewFeatures}
 
 # View final feature set before preprocessing
-df.head()
+print(df.head())
 ```
 
 ## Preprocessing pipeline
@@ -1729,7 +1730,7 @@ df_scores = pd.DataFrame(
   "Threshold prob. at best F1": threshold_probs_best.values()
   }, index = preds_dict.keys()
 )
-df_scores
+print(df_scores)
 ```
 
 ### Precision - recall curves
@@ -1826,7 +1827,7 @@ _ = fig.suptitle("F1 - precision - recall scores across threshold probabilities"
 _ = sns.lineplot(
   ax = ax[0], 
   x = "Threshold prob.", y = "Score", hue = "Metric", 
-  data = df_f1_logistic)
+  data = df_f1_logistic, legend =  False)
 _ = ax[0].set_title("Logistic")
 
 # SVM
@@ -1847,7 +1848,7 @@ _ = ax[2].set_title("XGBoost")
 _ = sns.lineplot(
   ax = ax[3], 
   x = "Threshold prob.", y = "Score", hue = "Metric", 
-  data = df_f1_nn, legend = False)
+  data = df_f1_nn, legend = True)
 _ = ax[3].set_title("Neural net")
 plt.show()
 plt.close("all")
@@ -1900,9 +1901,10 @@ _ = sns.histplot(
   x = "Prob. predictions", 
   hue = "Actual labels",
   multiple = "stack",
-  data = df_preds_logistic)
+  data = df_preds_logistic,
+  legend = False)
 _ = ax[0].set_title("Logistic")
-_ = ax[0].set_ylabel("N. of times predicted")
+_ = ax[0].set_ylabel("")
 
 # SVM
 _ = sns.histplot(
@@ -1913,7 +1915,7 @@ _ = sns.histplot(
   data = df_preds_svm,
   legend = False)
 _ = ax[1].set_title("SVM")
-_ = ax[1].set_ylabel("N. of times predicted")
+_ = ax[1].set_ylabel("")
 
 # XGBoost
 _ = sns.histplot(
@@ -1924,7 +1926,7 @@ _ = sns.histplot(
   data = df_preds_xgb,
   legend = False)
 _ = ax[2].set_title("XGBoost")
-_ = ax[2].set_ylabel("N. of times predicted")
+_ = ax[2].set_ylabel("")
 
 # NN
 _ = sns.histplot(
@@ -1933,7 +1935,7 @@ _ = sns.histplot(
   hue = "Actual labels",
   multiple = "stack",
   data = df_preds_nn,
-  legend = False)
+  legend = True)
 _ = ax[3].set_title("Neural net")
 _ = ax[3].set_xlabel("Probability predictions for positive class")
 _ = ax[3].set_ylabel("N. of times predicted")
@@ -2131,6 +2133,8 @@ _ = sns.lineplot(
   data = df_long, x = "Threshold", y = "Profits", hue = "Model")
 _ = ax[0].set_xlabel("Threshold probability")
 _ = ax[0].set_ylabel("Profits, $mil")
+_ = ax[0].legend(
+  title = "Model", bbox_to_anchor=(1.05, 1.0), fontsize="small", loc='best')
   
 _ = sns.lineplot(
   ax = ax[1],
@@ -2168,12 +2172,16 @@ df_optimal["Profits"] = df_optimal["Profits"] / 1e6
 
 # Rename columns  
 df_optimal = df_optimal.rename({
-  "Threshold": "Threshold prob.",
+  "Threshold": "Optimal threshold prob.",
   "Purchases": "N. cars purchased",
   "Profits": "Profits, $mil"
 }, axis = 1)
 
-df_optimal
+# Reorder columns
+df_optimal = df_optimal[[
+  "Model", "Optimal threshold prob.", "N. cars purchased", "Profits, $mil"]]
+
+print(df_optimal)
 ```
 
 ## Conclusions

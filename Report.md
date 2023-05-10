@@ -141,463 +141,127 @@ raw_data = loadarff("./RawData/kick.arff")
 df = pd.DataFrame(raw_data[0])
 
 # Print first & last 5 rows, all columns
-df
+print(df)
 ```
 
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
+          IsBadBuy       PurchDate   Auction   VehYear  VehicleAge          Make   
+    0         b'0' 1260144000.0000  b'ADESA' 2006.0000      3.0000      b'MAZDA'  \
+    1         b'0' 1260144000.0000  b'ADESA' 2004.0000      5.0000      b'DODGE'   
+    2         b'0' 1260144000.0000  b'ADESA' 2005.0000      4.0000      b'DODGE'   
+    3         b'0' 1260144000.0000  b'ADESA' 2004.0000      5.0000      b'DODGE'   
+    4         b'0' 1260144000.0000  b'ADESA' 2005.0000      4.0000       b'FORD'   
+    ...        ...             ...       ...       ...         ...           ...   
+    72978     b'1' 1259712000.0000  b'ADESA' 2001.0000      8.0000    b'MERCURY'   
+    72979     b'0' 1259712000.0000  b'ADESA' 2007.0000      2.0000  b'CHEVROLET'   
+    72980     b'0' 1259712000.0000  b'ADESA' 2005.0000      4.0000       b'JEEP'   
+    72981     b'0' 1259712000.0000  b'ADESA' 2006.0000      3.0000  b'CHEVROLET'   
+    72982     b'0' 1259712000.0000  b'ADESA' 2006.0000      3.0000      b'MAZDA'   
 
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
+                             Model    Trim              SubModel      Color   
+    0                    b'MAZDA3'    b'i'         b'4D SEDAN I'     b'RED'  \
+    1       b'1500 RAM PICKUP 2WD'   b'ST'  b'QUAD CAB 4.7L SLT'   b'WHITE'   
+    2                b'STRATUS V6'  b'SXT'   b'4D SEDAN SXT FFV'  b'MAROON'   
+    3                      b'NEON'  b'SXT'           b'4D SEDAN'  b'SILVER'   
+    4                     b'FOCUS'  b'ZX3'       b'2D COUPE ZX3'  b'SILVER'   
+    ...                        ...     ...                   ...        ...   
+    72978                 b'SABLE'   b'GS'        b'4D SEDAN GS'   b'BLACK'   
+    72979             b'MALIBU 4C'   b'LS'        b'4D SEDAN LS'  b'SILVER'   
+    72980  b'GRAND CHEROKEE 2WD V'  b'Lar'    b'4D WAGON LAREDO'  b'SILVER'   
+    72981                b'IMPALA'   b'LS'        b'4D SEDAN LS'   b'WHITE'   
+    72982                b'MAZDA6'    b's'         b'4D SEDAN S'  b'SILVER'   
 
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>IsBadBuy</th>
-      <th>PurchDate</th>
-      <th>Auction</th>
-      <th>VehYear</th>
-      <th>VehicleAge</th>
-      <th>Make</th>
-      <th>Model</th>
-      <th>Trim</th>
-      <th>SubModel</th>
-      <th>Color</th>
-      <th>Transmission</th>
-      <th>WheelTypeID</th>
-      <th>WheelType</th>
-      <th>VehOdo</th>
-      <th>Nationality</th>
-      <th>Size</th>
-      <th>TopThreeAmericanName</th>
-      <th>MMRAcquisitionAuctionAveragePrice</th>
-      <th>MMRAcquisitionAuctionCleanPrice</th>
-      <th>MMRAcquisitionRetailAveragePrice</th>
-      <th>MMRAcquisitonRetailCleanPrice</th>
-      <th>MMRCurrentAuctionAveragePrice</th>
-      <th>MMRCurrentAuctionCleanPrice</th>
-      <th>MMRCurrentRetailAveragePrice</th>
-      <th>MMRCurrentRetailCleanPrice</th>
-      <th>PRIMEUNIT</th>
-      <th>AUCGUART</th>
-      <th>BYRNO</th>
-      <th>VNZIP1</th>
-      <th>VNST</th>
-      <th>VehBCost</th>
-      <th>IsOnlineSale</th>
-      <th>WarrantyCost</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>0</th>
-      <td>b'0'</td>
-      <td>1260144000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2006.0000</td>
-      <td>3.0000</td>
-      <td>b'MAZDA'</td>
-      <td>b'MAZDA3'</td>
-      <td>b'i'</td>
-      <td>b'4D SEDAN I'</td>
-      <td>b'RED'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>89046.0000</td>
-      <td>b'OTHER ASIAN'</td>
-      <td>b'MEDIUM'</td>
-      <td>b'OTHER'</td>
-      <td>8155.0000</td>
-      <td>9829.0000</td>
-      <td>11636.0000</td>
-      <td>13600.0000</td>
-      <td>7451.0000</td>
-      <td>8552.0000</td>
-      <td>11597.0000</td>
-      <td>12409.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'21973'</td>
-      <td>b'33619'</td>
-      <td>b'FL'</td>
-      <td>7100.0000</td>
-      <td>b'0'</td>
-      <td>1113.0000</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>b'0'</td>
-      <td>1260144000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2004.0000</td>
-      <td>5.0000</td>
-      <td>b'DODGE'</td>
-      <td>b'1500 RAM PICKUP 2WD'</td>
-      <td>b'ST'</td>
-      <td>b'QUAD CAB 4.7L SLT'</td>
-      <td>b'WHITE'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>93593.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'LARGE TRUCK'</td>
-      <td>b'CHRYSLER'</td>
-      <td>6854.0000</td>
-      <td>8383.0000</td>
-      <td>10897.0000</td>
-      <td>12572.0000</td>
-      <td>7456.0000</td>
-      <td>9222.0000</td>
-      <td>11374.0000</td>
-      <td>12791.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'19638'</td>
-      <td>b'33619'</td>
-      <td>b'FL'</td>
-      <td>7600.0000</td>
-      <td>b'0'</td>
-      <td>1053.0000</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>b'0'</td>
-      <td>1260144000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2005.0000</td>
-      <td>4.0000</td>
-      <td>b'DODGE'</td>
-      <td>b'STRATUS V6'</td>
-      <td>b'SXT'</td>
-      <td>b'4D SEDAN SXT FFV'</td>
-      <td>b'MAROON'</td>
-      <td>b'AUTO'</td>
-      <td>b'2'</td>
-      <td>b'Covers'</td>
-      <td>73807.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'MEDIUM'</td>
-      <td>b'CHRYSLER'</td>
-      <td>3202.0000</td>
-      <td>4760.0000</td>
-      <td>6943.0000</td>
-      <td>8457.0000</td>
-      <td>4035.0000</td>
-      <td>5557.0000</td>
-      <td>7146.0000</td>
-      <td>8702.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'19638'</td>
-      <td>b'33619'</td>
-      <td>b'FL'</td>
-      <td>4900.0000</td>
-      <td>b'0'</td>
-      <td>1389.0000</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>b'0'</td>
-      <td>1260144000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2004.0000</td>
-      <td>5.0000</td>
-      <td>b'DODGE'</td>
-      <td>b'NEON'</td>
-      <td>b'SXT'</td>
-      <td>b'4D SEDAN'</td>
-      <td>b'SILVER'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>65617.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'COMPACT'</td>
-      <td>b'CHRYSLER'</td>
-      <td>1893.0000</td>
-      <td>2675.0000</td>
-      <td>4658.0000</td>
-      <td>5690.0000</td>
-      <td>1844.0000</td>
-      <td>2646.0000</td>
-      <td>4375.0000</td>
-      <td>5518.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'19638'</td>
-      <td>b'33619'</td>
-      <td>b'FL'</td>
-      <td>4100.0000</td>
-      <td>b'0'</td>
-      <td>630.0000</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>b'0'</td>
-      <td>1260144000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2005.0000</td>
-      <td>4.0000</td>
-      <td>b'FORD'</td>
-      <td>b'FOCUS'</td>
-      <td>b'ZX3'</td>
-      <td>b'2D COUPE ZX3'</td>
-      <td>b'SILVER'</td>
-      <td>b'MANUAL'</td>
-      <td>b'2'</td>
-      <td>b'Covers'</td>
-      <td>69367.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'COMPACT'</td>
-      <td>b'FORD'</td>
-      <td>3913.0000</td>
-      <td>5054.0000</td>
-      <td>7723.0000</td>
-      <td>8707.0000</td>
-      <td>3247.0000</td>
-      <td>4384.0000</td>
-      <td>6739.0000</td>
-      <td>7911.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'19638'</td>
-      <td>b'33619'</td>
-      <td>b'FL'</td>
-      <td>4000.0000</td>
-      <td>b'0'</td>
-      <td>1020.0000</td>
-    </tr>
-    <tr>
-      <th>...</th>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-    </tr>
-    <tr>
-      <th>72978</th>
-      <td>b'1'</td>
-      <td>1259712000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2001.0000</td>
-      <td>8.0000</td>
-      <td>b'MERCURY'</td>
-      <td>b'SABLE'</td>
-      <td>b'GS'</td>
-      <td>b'4D SEDAN GS'</td>
-      <td>b'BLACK'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>45234.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'MEDIUM'</td>
-      <td>b'FORD'</td>
-      <td>1996.0000</td>
-      <td>2993.0000</td>
-      <td>2656.0000</td>
-      <td>3732.0000</td>
-      <td>2190.0000</td>
-      <td>3055.0000</td>
-      <td>4836.0000</td>
-      <td>5937.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'18111'</td>
-      <td>b'30212'</td>
-      <td>b'GA'</td>
-      <td>4200.0000</td>
-      <td>b'0'</td>
-      <td>993.0000</td>
-    </tr>
-    <tr>
-      <th>72979</th>
-      <td>b'0'</td>
-      <td>1259712000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2007.0000</td>
-      <td>2.0000</td>
-      <td>b'CHEVROLET'</td>
-      <td>b'MALIBU 4C'</td>
-      <td>b'LS'</td>
-      <td>b'4D SEDAN LS'</td>
-      <td>b'SILVER'</td>
-      <td>b'AUTO'</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>71759.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'MEDIUM'</td>
-      <td>b'GM'</td>
-      <td>6418.0000</td>
-      <td>7325.0000</td>
-      <td>7431.0000</td>
-      <td>8411.0000</td>
-      <td>6785.0000</td>
-      <td>8132.0000</td>
-      <td>10151.0000</td>
-      <td>11652.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'18881'</td>
-      <td>b'30212'</td>
-      <td>b'GA'</td>
-      <td>6200.0000</td>
-      <td>b'0'</td>
-      <td>1038.0000</td>
-    </tr>
-    <tr>
-      <th>72980</th>
-      <td>b'0'</td>
-      <td>1259712000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2005.0000</td>
-      <td>4.0000</td>
-      <td>b'JEEP'</td>
-      <td>b'GRAND CHEROKEE 2WD V'</td>
-      <td>b'Lar'</td>
-      <td>b'4D WAGON LAREDO'</td>
-      <td>b'SILVER'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>88500.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'MEDIUM SUV'</td>
-      <td>b'CHRYSLER'</td>
-      <td>8545.0000</td>
-      <td>9959.0000</td>
-      <td>9729.0000</td>
-      <td>11256.0000</td>
-      <td>8375.0000</td>
-      <td>9802.0000</td>
-      <td>11831.0000</td>
-      <td>14402.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'18111'</td>
-      <td>b'30212'</td>
-      <td>b'GA'</td>
-      <td>8200.0000</td>
-      <td>b'0'</td>
-      <td>1893.0000</td>
-    </tr>
-    <tr>
-      <th>72981</th>
-      <td>b'0'</td>
-      <td>1259712000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2006.0000</td>
-      <td>3.0000</td>
-      <td>b'CHEVROLET'</td>
-      <td>b'IMPALA'</td>
-      <td>b'LS'</td>
-      <td>b'4D SEDAN LS'</td>
-      <td>b'WHITE'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>79554.0000</td>
-      <td>b'AMERICAN'</td>
-      <td>b'LARGE'</td>
-      <td>b'GM'</td>
-      <td>6420.0000</td>
-      <td>7604.0000</td>
-      <td>7434.0000</td>
-      <td>8712.0000</td>
-      <td>6590.0000</td>
-      <td>7684.0000</td>
-      <td>10099.0000</td>
-      <td>11228.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'18881'</td>
-      <td>b'30212'</td>
-      <td>b'GA'</td>
-      <td>7000.0000</td>
-      <td>b'0'</td>
-      <td>1974.0000</td>
-    </tr>
-    <tr>
-      <th>72982</th>
-      <td>b'0'</td>
-      <td>1259712000.0000</td>
-      <td>b'ADESA'</td>
-      <td>2006.0000</td>
-      <td>3.0000</td>
-      <td>b'MAZDA'</td>
-      <td>b'MAZDA6'</td>
-      <td>b's'</td>
-      <td>b'4D SEDAN S'</td>
-      <td>b'SILVER'</td>
-      <td>b'AUTO'</td>
-      <td>b'1'</td>
-      <td>b'Alloy'</td>
-      <td>66855.0000</td>
-      <td>b'OTHER ASIAN'</td>
-      <td>b'MEDIUM'</td>
-      <td>b'OTHER'</td>
-      <td>7535.0000</td>
-      <td>8771.0000</td>
-      <td>8638.0000</td>
-      <td>9973.0000</td>
-      <td>7730.0000</td>
-      <td>9102.0000</td>
-      <td>11954.0000</td>
-      <td>13246.0000</td>
-      <td>b'?'</td>
-      <td>b'?'</td>
-      <td>b'18111'</td>
-      <td>b'30212'</td>
-      <td>b'GA'</td>
-      <td>8000.0000</td>
-      <td>b'0'</td>
-      <td>1313.0000</td>
-    </tr>
-  </tbody>
-</table>
-<p>72983 rows × 33 columns</p>
-</div>
+          Transmission WheelTypeID  WheelType     VehOdo     Nationality   
+    0          b'AUTO'        b'1'   b'Alloy' 89046.0000  b'OTHER ASIAN'  \
+    1          b'AUTO'        b'1'   b'Alloy' 93593.0000     b'AMERICAN'   
+    2          b'AUTO'        b'2'  b'Covers' 73807.0000     b'AMERICAN'   
+    3          b'AUTO'        b'1'   b'Alloy' 65617.0000     b'AMERICAN'   
+    4        b'MANUAL'        b'2'  b'Covers' 69367.0000     b'AMERICAN'   
+    ...            ...         ...        ...        ...             ...   
+    72978      b'AUTO'        b'1'   b'Alloy' 45234.0000     b'AMERICAN'   
+    72979      b'AUTO'        b'?'       b'?' 71759.0000     b'AMERICAN'   
+    72980      b'AUTO'        b'1'   b'Alloy' 88500.0000     b'AMERICAN'   
+    72981      b'AUTO'        b'1'   b'Alloy' 79554.0000     b'AMERICAN'   
+    72982      b'AUTO'        b'1'   b'Alloy' 66855.0000  b'OTHER ASIAN'   
+
+                     Size TopThreeAmericanName  MMRAcquisitionAuctionAveragePrice   
+    0           b'MEDIUM'             b'OTHER'                          8155.0000  \
+    1      b'LARGE TRUCK'          b'CHRYSLER'                          6854.0000   
+    2           b'MEDIUM'          b'CHRYSLER'                          3202.0000   
+    3          b'COMPACT'          b'CHRYSLER'                          1893.0000   
+    4          b'COMPACT'              b'FORD'                          3913.0000   
+    ...               ...                  ...                                ...   
+    72978       b'MEDIUM'              b'FORD'                          1996.0000   
+    72979       b'MEDIUM'                b'GM'                          6418.0000   
+    72980   b'MEDIUM SUV'          b'CHRYSLER'                          8545.0000   
+    72981        b'LARGE'                b'GM'                          6420.0000   
+    72982       b'MEDIUM'             b'OTHER'                          7535.0000   
+
+           MMRAcquisitionAuctionCleanPrice  MMRAcquisitionRetailAveragePrice   
+    0                            9829.0000                        11636.0000  \
+    1                            8383.0000                        10897.0000   
+    2                            4760.0000                         6943.0000   
+    3                            2675.0000                         4658.0000   
+    4                            5054.0000                         7723.0000   
+    ...                                ...                               ...   
+    72978                        2993.0000                         2656.0000   
+    72979                        7325.0000                         7431.0000   
+    72980                        9959.0000                         9729.0000   
+    72981                        7604.0000                         7434.0000   
+    72982                        8771.0000                         8638.0000   
+
+           MMRAcquisitonRetailCleanPrice  MMRCurrentAuctionAveragePrice   
+    0                         13600.0000                      7451.0000  \
+    1                         12572.0000                      7456.0000   
+    2                          8457.0000                      4035.0000   
+    3                          5690.0000                      1844.0000   
+    4                          8707.0000                      3247.0000   
+    ...                              ...                            ...   
+    72978                      3732.0000                      2190.0000   
+    72979                      8411.0000                      6785.0000   
+    72980                     11256.0000                      8375.0000   
+    72981                      8712.0000                      6590.0000   
+    72982                      9973.0000                      7730.0000   
+
+           MMRCurrentAuctionCleanPrice  MMRCurrentRetailAveragePrice   
+    0                        8552.0000                    11597.0000  \
+    1                        9222.0000                    11374.0000   
+    2                        5557.0000                     7146.0000   
+    3                        2646.0000                     4375.0000   
+    4                        4384.0000                     6739.0000   
+    ...                            ...                           ...   
+    72978                    3055.0000                     4836.0000   
+    72979                    8132.0000                    10151.0000   
+    72980                    9802.0000                    11831.0000   
+    72981                    7684.0000                    10099.0000   
+    72982                    9102.0000                    11954.0000   
+
+           MMRCurrentRetailCleanPrice PRIMEUNIT AUCGUART     BYRNO    VNZIP1   
+    0                      12409.0000      b'?'     b'?'  b'21973'  b'33619'  \
+    1                      12791.0000      b'?'     b'?'  b'19638'  b'33619'   
+    2                       8702.0000      b'?'     b'?'  b'19638'  b'33619'   
+    3                       5518.0000      b'?'     b'?'  b'19638'  b'33619'   
+    4                       7911.0000      b'?'     b'?'  b'19638'  b'33619'   
+    ...                           ...       ...      ...       ...       ...   
+    72978                   5937.0000      b'?'     b'?'  b'18111'  b'30212'   
+    72979                  11652.0000      b'?'     b'?'  b'18881'  b'30212'   
+    72980                  14402.0000      b'?'     b'?'  b'18111'  b'30212'   
+    72981                  11228.0000      b'?'     b'?'  b'18881'  b'30212'   
+    72982                  13246.0000      b'?'     b'?'  b'18111'  b'30212'   
+
+            VNST  VehBCost IsOnlineSale  WarrantyCost  
+    0      b'FL' 7100.0000         b'0'     1113.0000  
+    1      b'FL' 7600.0000         b'0'     1053.0000  
+    2      b'FL' 4900.0000         b'0'     1389.0000  
+    3      b'FL' 4100.0000         b'0'      630.0000  
+    4      b'FL' 4000.0000         b'0'     1020.0000  
+    ...      ...       ...          ...           ...  
+    72978  b'GA' 4200.0000         b'0'      993.0000  
+    72979  b'GA' 6200.0000         b'0'     1038.0000  
+    72980  b'GA' 8200.0000         b'0'     1893.0000  
+    72981  b'GA' 7000.0000         b'0'     1974.0000  
+    72982  b'GA' 8000.0000         b'0'     1313.0000  
+
+    [72983 rows x 33 columns]
 
 ``` python
 # Convert object columns from bytes to string datatype
@@ -685,28 +349,70 @@ df["Auction"].value_counts(normalize = True)
 
 ``` python
 # Vehicle years range from 2001 to 2010
-df[["VehYear", "VehicleAge"]].describe()
+print(df[["VehYear", "VehicleAge"]].describe())
 
 # Purchase age almost always matches PurchYear - VehYear.
 purch_year = df["PurchDate"].dt.year
 veh_year = df["VehYear"]
 
-print("\nCases where purchase year - vehicle year = vehicle age: ")
-((purch_year - veh_year) == df["VehicleAge"]).sum()
+print("\nCases where purchase year - vehicle year = vehicle age: " + str(((purch_year - veh_year) == df["VehicleAge"]).sum()))
 ```
 
+             VehYear  VehicleAge
+    count 72983.0000  72983.0000
+    mean   2005.3431      4.1766
+    std       1.7313      1.7122
+    min    2001.0000      0.0000
+    25%    2004.0000      3.0000
+    50%    2005.0000      4.0000
+    75%    2007.0000      5.0000
+    max    2010.0000      9.0000
 
-    Cases where purchase year - vehicle year = vehicle age: 
-
-    72976
+    Cases where purchase year - vehicle year = vehicle age: 72976
 
 ``` python
 # There are brands with very few observations.
-df["Make"].value_counts()
+print(df["Make"].value_counts())
 
 # Recode TOYOTA SCION into SCION
 df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
 ```
+
+    Make
+    CHEVROLET       17248
+    DODGE           12912
+    FORD            11305
+    CHRYSLER         8844
+    PONTIAC          4258
+    KIA              2484
+    SATURN           2163
+    NISSAN           2085
+    HYUNDAI          1811
+    JEEP             1644
+    SUZUKI           1328
+    TOYOTA           1144
+    MITSUBISHI       1030
+    MAZDA             979
+    MERCURY           913
+    BUICK             720
+    GMC               649
+    HONDA             497
+    OLDSMOBILE        243
+    VOLKSWAGEN        134
+    ISUZU             134
+    SCION             129
+    LINCOLN            97
+    INFINITI           42
+    VOLVO              37
+    CADILLAC           33
+    ACURA              33
+    LEXUS              31
+    SUBARU             28
+    MINI               24
+    PLYMOUTH            2
+    TOYOTA SCION        1
+    HUMMER              1
+    Name: count, dtype: int64
 
 ``` python
 # There are 1063 unique models, many with only 1 observation.
@@ -803,22 +509,47 @@ df["SubModel"].value_counts()
 
 ``` python
 # 8 missing values for color, recode them as NOT AVAIL
-df["Color"].value_counts()
+print(df["Color"].value_counts())
 df.loc[pd.isna(df["Color"]), "Color"] = "NOT AVAIL"
 ```
 
+    Color
+    SILVER       14875
+    WHITE        12123
+    BLUE         10347
+    GREY          7887
+    BLACK         7627
+    RED           6257
+    GOLD          5231
+    GREEN         3194
+    MAROON        2046
+    BEIGE         1584
+    BROWN          436
+    ORANGE         415
+    PURPLE         373
+    YELLOW         244
+    OTHER          242
+    NOT AVAIL       94
+    Name: count, dtype: int64
+
 ``` python
 # 9 missing values from transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
-df["Transmission"].value_counts()
+print(df["Transmission"].value_counts())
 
 # Replace "Manual" with MANUAL in transmission
 df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
 ```
 
+    Transmission
+    AUTO      70398
+    MANUAL     2575
+    Manual        1
+    Name: count, dtype: int64
+
 ``` python
 # Work out & impute transmission NAs from car model
 print("Rows with Transmission values missing: ")
-df.loc[pd.isna(df["Transmission"]), ["VehYear", "Make", "Model", "Trim", "SubModel"]]
+print(df.loc[pd.isna(df["Transmission"]), ["VehYear", "Make", "Model", "Trim", "SubModel"]])
 
 transmission_nas = ["AUTO", "MANUAL", "MANUAL", "MANUAL", "AUTO", "MANUAL", "MANUAL", "AUTO", "AUTO"]
   
@@ -826,13 +557,31 @@ df.loc[pd.isna(df["Transmission"]), "Transmission"] = transmission_nas
 ```
 
     Rows with Transmission values missing: 
+            VehYear       Make                 Model Trim         SubModel
+    15906 2005.0000    MERCURY   MONTEGO 3.0L V6 EFI  Bas  4D SEDAN LUXURY
+    24567 2006.0000      DODGE  STRATUS V6 2.7L V6 M  SXT              NaN
+    24578 2006.0000      DODGE  STRATUS V6 2.7L V6 M  SXT              NaN
+    70432 2001.0000  CHEVROLET  S10 PICKUP 2WD 4C 2.  Bas              NaN
+    70434 2004.0000  CHEVROLET    IMPALA 3.4L V6 SFI  Bas              NaN
+    70437 2004.0000    PONTIAC   GRAND AM V6 3.4L V6   SE              NaN
+    70445 2002.0000  CHEVROLET   CAVALIER 4C 2.2L I4  Bas              NaN
+    70446 2002.0000    MERCURY  MOUNTAINEER 2WD V8 4  NaN              NaN
+    70450 2006.0000       FORD  FREESTAR FWD V6 3.9L   SE              NaN
 
 ``` python
 # 3169 missing values in WheelTypeID, 3174 in WheelType. Crosscheck these columns.
-df["WheelTypeID"].value_counts()
+print(df["WheelTypeID"].value_counts())
 print("\n")
-df["WheelType"].value_counts()
+print(df["WheelType"].value_counts())
 ```
+
+    WheelTypeID
+    1    36050
+    2    33004
+    3      755
+    0        5
+    Name: count, dtype: int64
+
 
     WheelType
     Alloy      36050
@@ -845,12 +594,11 @@ print("N. of WheelTypeID NAs that are also WheelType NAs: " +
 str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
 )
 
-print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
+print("Remaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
 df.loc[df["WheelTypeID"] == "0", "WheelType"]
 ```
 
     N. of WheelTypeID NAs that are also WheelType NAs: 3169
-
     Remaining 5 rows with WheelType NAs are WheelTypeID = 0: 
 
     2992     NaN
@@ -899,12 +647,18 @@ df["Nationality"].value_counts()
 ``` python
 # Work out the 5 missing Nationality values from make
 print("Makes of rows with missing Nationality values: ")
-df.loc[pd.isnull(df["Nationality"]), "Make"]
+print(df.loc[pd.isnull(df["Nationality"]), "Make"])
 nationality_nas = ["AMERICAN", "AMERICAN", "OTHER ASIAN", "AMERICAN", "AMERICAN"]
 df.loc[pd.isnull(df["Nationality"]), "Nationality"] = nationality_nas
 ```
 
     Makes of rows with missing Nationality values: 
+    10888        GMC
+    25169      DODGE
+    37986    HYUNDAI
+    69948       JEEP
+    69958       JEEP
+    Name: Make, dtype: object
 
 ``` python
 # 5 missing values in size. Work these out from the model.
@@ -929,34 +683,51 @@ df["Size"].value_counts()
 ``` python
 # Work out the 5 missing Size values from make & model
 print("Rows with Size values missing: ")
-df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]]
+print(df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]])
 
 print("\nSize values of other rows with same model: ")
-df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0]
-df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0]
-df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0]
-df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0]
+print(df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
+df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
+df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0] + "\n" +
+df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0])
 
 size_nas = ["LARGE TRUCK", "MEDIUM SUV", "MEDIUM", "SMALL SUV", "SMALL SUV"]
 df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
 ```
 
     Rows with Size values missing: 
+            VehYear     Make                Model
+    10888 2002.0000      GMC          SIERRA 1500
+    25169 2008.0000    DODGE         NITRO 4WD V6
+    37986 2006.0000  HYUNDAI  ELANTRA 2.0L I4 MPI
+    69948 2008.0000     JEEP       PATRIOT 2WD 4C
+    69958 2008.0000     JEEP       PATRIOT 2WD 4C
 
     Size values of other rows with same model: 
+    LARGE TRUCK
+    MEDIUM SUV
+    MEDIUM
+    SMALL SUV
 
 ``` python
 # Unnecessary column, information already incorporated in Make. Drop it
-df["TopThreeAmericanName"].value_counts()
+print(df["TopThreeAmericanName"].value_counts())
 df = df.drop("TopThreeAmericanName", axis = 1)
 ```
 
+    TopThreeAmericanName
+    GM          25314
+    CHRYSLER    23399
+    FORD        12315
+    OTHER       11950
+    Name: count, dtype: int64
+
 ``` python
 print("Missing values in MMR columns:")
-pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
+print(pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
        'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
        'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
-       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum()
+       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum())
        
 # Drop current MMR prices to make the exercise more realistic
 df = df.drop([
@@ -965,25 +736,36 @@ df = df.drop([
 ```
 
     Missing values in MMR columns:
+    MMRAcquisitionAuctionAveragePrice     18
+    MMRAcquisitionAuctionCleanPrice       18
+    MMRAcquisitionRetailAveragePrice      18
+    MMRAcquisitonRetailCleanPrice         18
+    MMRCurrentAuctionAveragePrice        315
+    MMRCurrentAuctionCleanPrice          315
+    MMRCurrentRetailAveragePrice         315
+    MMRCurrentRetailCleanPrice           315
+    dtype: int64
 
 ``` python
 # Some MMR values are zero
-print("N. of rows with at least one MMR value of 0:") 
-len(df.loc[
-  (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
-  (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
-  (df["MMRAcquisitionRetailAveragePrice"] == 0) |
-  (df["MMRAcquisitonRetailCleanPrice"] == 0)
-  ])
+print("N. of rows with at least one MMR value of 0: " + 
+      str(len(df.loc[
+        (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
+        (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
+        (df["MMRAcquisitionRetailAveragePrice"] == 0) |
+        (df["MMRAcquisitonRetailCleanPrice"] == 0)
+        ]))) 
+
 
 # Some MMR values are one
-print("N. of rows with at least one MMR value of 1:") 
-len(df.loc[
-  (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
-  (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
-  (df["MMRAcquisitionRetailAveragePrice"] == 1) |
-  (df["MMRAcquisitonRetailCleanPrice"] == 1)
-  ])
+print("N. of rows with at least one MMR value of 1: " + 
+      str(len(df.loc[
+        (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
+        (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
+        (df["MMRAcquisitionRetailAveragePrice"] == 1) |
+        (df["MMRAcquisitonRetailCleanPrice"] == 1)
+       ]))) 
+
   
 # Drop rows with NAs in MMR
 df = df.dropna(subset = [
@@ -997,26 +779,36 @@ df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
   (df["MMRAcquisitonRetailCleanPrice"] > 0)].copy()
 ```
 
-    N. of rows with at least one MMR value of 0:
-    N. of rows with at least one MMR value of 1:
+    N. of rows with at least one MMR value of 0: 828
+    N. of rows with at least one MMR value of 1: 131
 
 ``` python
 # 95% missing column. Missing values possibly mean NO. YES means there was unusual
 # demand for the car.
-df["PRIMEUNIT"].value_counts(normalize = True)
+print(df["PRIMEUNIT"].value_counts(normalize = True))
 
 # Fill NAs in PRIMEUNIT with UNKNOWN.
 df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
 ```
 
+    PRIMEUNIT
+    NO    0.9817
+    YES   0.0183
+    Name: proportion, dtype: float64
+
 ``` python
 # 95% missing column. AUCGUART is the vehicle inspection level at auction. Green
 # means inspected, yellow means partial information available, red means you buy what you see. Could assume yellow for missing values.
-df["AUCGUART"].value_counts(normalize = True)
+print(df["AUCGUART"].value_counts(normalize = True))
 
 # Fill NAs in AUCGUART with UNKNOWN.
 df.loc[pd.isnull(df["AUCGUART"]), "AUCGUART"] = "UNKNOWN"
 ```
+
+    AUCGUART
+    GREEN   0.9770
+    RED     0.0230
+    Name: proportion, dtype: float64
 
 ``` python
 # BYRNO is buyer no. 74 unique buyers, some with only 1 observation.
@@ -1152,7 +944,7 @@ df["RWD"] = df["Model"].str.contains("RWD").astype(int)
 # Chassis type features from SubModel: WAGON, SEDAN, COUPE, HATCHBACK, CONVERTIBLE
 # Work out and recode these features manually for rows where SubModel is missing
 print("Rows where SubModel is missing:")
-df.loc[pd.isnull(df["SubModel"]), "Model"]
+print(df.loc[pd.isnull(df["SubModel"]), "Model"])
 
 df["ChassisWagon"] = df["SubModel"].str.contains("WAGON")
 df.loc[pd.isnull(df["ChassisWagon"]), "ChassisWagon"] = [
@@ -1178,6 +970,15 @@ df["ChassisConvertible"] = df["ChassisConvertible"].astype(int)
 ```
 
     Rows where SubModel is missing:
+    24567    STRATUS V6 2.7L V6 M
+    24578    STRATUS V6 2.7L V6 M
+    70432    S10 PICKUP 2WD 4C 2.
+    70434      IMPALA 3.4L V6 SFI
+    70437     GRAND AM V6 3.4L V6
+    70445     CAVALIER 4C 2.2L I4
+    70446    MOUNTAINEER 2WD V8 4
+    70450    FREESTAR FWD V6 3.9L
+    Name: Model, dtype: object
 
 ``` python
 # Door type feature from SubModel: 4D
@@ -1222,9 +1023,13 @@ df["PremiumRetailClean"] = (df["VehBCost"] - df["MMRAcquisitonRetailCleanPrice"]
 df["WarrantyRatio"] = df["WarrantyCost"] / df["VehBCost"]
 
 # The observation with purchase price = 1 skews the WarrantyRatio feature greatly. Drop it.
-df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = False).iloc[0]
+print(df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = False).iloc[0])
 df = df.loc[df["VehBCost"] != 1].copy()
 ```
+
+    VehBCost           1.0000
+    WarrantyRatio   1590.0000
+    Name: 20442, dtype: float64
 
 ``` python
 # One hot encode some categoricals in-place
@@ -1253,594 +1058,155 @@ df = encoder_cyclical.fit_transform(df)
 
 ``` python
 # View final feature set before preprocessing
-df.head()
+print(df.head())
 ```
 
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
+      IsBadBuy  VehicleAge   Make                Model     VehOdo   
+    0        0      3.0000  MAZDA               MAZDA3 89046.0000  \
+    1        0      5.0000  DODGE  1500 RAM PICKUP 2WD 93593.0000   
+    2        0      4.0000  DODGE           STRATUS V6 73807.0000   
+    3        0      5.0000  DODGE                 NEON 65617.0000   
+    4        0      4.0000   FORD                FOCUS 69367.0000   
 
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
+       MMRAcquisitionAuctionAveragePrice  MMRAcquisitionAuctionCleanPrice   
+    0                          8155.0000                        9829.0000  \
+    1                          6854.0000                        8383.0000   
+    2                          3202.0000                        4760.0000   
+    3                          1893.0000                        2675.0000   
+    4                          3913.0000                        5054.0000   
 
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>IsBadBuy</th>
-      <th>VehicleAge</th>
-      <th>Make</th>
-      <th>Model</th>
-      <th>VehOdo</th>
-      <th>MMRAcquisitionAuctionAveragePrice</th>
-      <th>MMRAcquisitionAuctionCleanPrice</th>
-      <th>MMRAcquisitionRetailAveragePrice</th>
-      <th>MMRAcquisitonRetailCleanPrice</th>
-      <th>BYRNO</th>
-      <th>VNZIP1</th>
-      <th>VNST</th>
-      <th>VehBCost</th>
-      <th>IsOnlineSale</th>
-      <th>WarrantyCost</th>
-      <th>EngineV6</th>
-      <th>EngineV8</th>
-      <th>EngineI4</th>
-      <th>Engine4C</th>
-      <th>Engine6C</th>
-      <th>2WD</th>
-      <th>4WD</th>
-      <th>AWD</th>
-      <th>FWD</th>
-      <th>RWD</th>
-      <th>ChassisWagon</th>
-      <th>ChassisSedan</th>
-      <th>ChassisCoupe</th>
-      <th>ChassisHatch</th>
-      <th>ChassisConvertible</th>
-      <th>FourDoors</th>
-      <th>ModelSubModel</th>
-      <th>MilesPerYear</th>
-      <th>PremiumAuctionAvg</th>
-      <th>PremiumAuctionClean</th>
-      <th>PremiumRetailAvg</th>
-      <th>PremiumRetailClean</th>
-      <th>WarrantyRatio</th>
-      <th>Auction_ADESA</th>
-      <th>Auction_OTHER</th>
-      <th>VehYear_2006.0</th>
-      <th>VehYear_2004.0</th>
-      <th>VehYear_2005.0</th>
-      <th>VehYear_2007.0</th>
-      <th>VehYear_2001.0</th>
-      <th>VehYear_2003.0</th>
-      <th>VehYear_2002.0</th>
-      <th>VehYear_2008.0</th>
-      <th>VehYear_2009.0</th>
-      <th>Color_RED</th>
-      <th>Color_WHITE</th>
-      <th>Color_MAROON</th>
-      <th>Color_SILVER</th>
-      <th>Color_BLACK</th>
-      <th>Color_GOLD</th>
-      <th>Color_GREY</th>
-      <th>Color_BLUE</th>
-      <th>Color_BEIGE</th>
-      <th>Color_PURPLE</th>
-      <th>Color_ORANGE</th>
-      <th>Color_GREEN</th>
-      <th>Color_BROWN</th>
-      <th>Color_YELLOW</th>
-      <th>Color_NOT AVAIL</th>
-      <th>Transmission_AUTO</th>
-      <th>WheelType_Alloy</th>
-      <th>WheelType_Covers</th>
-      <th>WheelType_Other</th>
-      <th>Nationality_OTHER ASIAN</th>
-      <th>Nationality_AMERICAN</th>
-      <th>Nationality_TOP LINE ASIAN</th>
-      <th>Size_MEDIUM</th>
-      <th>Size_LARGE TRUCK</th>
-      <th>Size_COMPACT</th>
-      <th>Size_LARGE</th>
-      <th>Size_VAN</th>
-      <th>Size_MEDIUM SUV</th>
-      <th>Size_LARGE SUV</th>
-      <th>Size_SPECIALTY</th>
-      <th>Size_SPORTS</th>
-      <th>Size_CROSSOVER</th>
-      <th>Size_SMALL SUV</th>
-      <th>PurchaseYear_2009</th>
-      <th>PRIMEUNIT_YES</th>
-      <th>PRIMEUNIT_NO</th>
-      <th>AUCGUART_GREEN</th>
-      <th>AUCGUART_RED</th>
-      <th>PurchaseMonth_sin</th>
-      <th>PurchaseMonth_cos</th>
-      <th>PurchaseDay_sin</th>
-      <th>PurchaseDay_cos</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>0</th>
-      <td>0</td>
-      <td>3.0000</td>
-      <td>MAZDA</td>
-      <td>MAZDA3</td>
-      <td>89046.0000</td>
-      <td>8155.0000</td>
-      <td>9829.0000</td>
-      <td>11636.0000</td>
-      <td>13600.0000</td>
-      <td>21973</td>
-      <td>33619</td>
-      <td>FL</td>
-      <td>7100.0000</td>
-      <td>0</td>
-      <td>1113.0000</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>MAZDA3 4D SEDAN I</td>
-      <td>29682.0000</td>
-      <td>-0.1294</td>
-      <td>-0.2776</td>
-      <td>-0.3898</td>
-      <td>-0.4779</td>
-      <td>0.1568</td>
-      <td>1</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-0.0000</td>
-      <td>1.0000</td>
-      <td>0.0000</td>
-      <td>1.0000</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>0</td>
-      <td>5.0000</td>
-      <td>DODGE</td>
-      <td>1500 RAM PICKUP 2WD</td>
-      <td>93593.0000</td>
-      <td>6854.0000</td>
-      <td>8383.0000</td>
-      <td>10897.0000</td>
-      <td>12572.0000</td>
-      <td>19638</td>
-      <td>33619</td>
-      <td>FL</td>
-      <td>7600.0000</td>
-      <td>0</td>
-      <td>1053.0000</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1500 RAM PICKUP 2WD QUAD CAB 4.7L SLT</td>
-      <td>18718.6000</td>
-      <td>0.1088</td>
-      <td>-0.0934</td>
-      <td>-0.3026</td>
-      <td>-0.3955</td>
-      <td>0.1386</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-0.0000</td>
-      <td>1.0000</td>
-      <td>0.0000</td>
-      <td>1.0000</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>0</td>
-      <td>4.0000</td>
-      <td>DODGE</td>
-      <td>STRATUS V6</td>
-      <td>73807.0000</td>
-      <td>3202.0000</td>
-      <td>4760.0000</td>
-      <td>6943.0000</td>
-      <td>8457.0000</td>
-      <td>19638</td>
-      <td>33619</td>
-      <td>FL</td>
-      <td>4900.0000</td>
-      <td>0</td>
-      <td>1389.0000</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>STRATUS V6 4D SEDAN SXT FFV</td>
-      <td>18451.7500</td>
-      <td>0.5303</td>
-      <td>0.0294</td>
-      <td>-0.2943</td>
-      <td>-0.4206</td>
-      <td>0.2835</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-0.0000</td>
-      <td>1.0000</td>
-      <td>0.0000</td>
-      <td>1.0000</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>0</td>
-      <td>5.0000</td>
-      <td>DODGE</td>
-      <td>NEON</td>
-      <td>65617.0000</td>
-      <td>1893.0000</td>
-      <td>2675.0000</td>
-      <td>4658.0000</td>
-      <td>5690.0000</td>
-      <td>19638</td>
-      <td>33619</td>
-      <td>FL</td>
-      <td>4100.0000</td>
-      <td>0</td>
-      <td>630.0000</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>NEON 4D SEDAN</td>
-      <td>13123.4000</td>
-      <td>1.1659</td>
-      <td>0.5327</td>
-      <td>-0.1198</td>
-      <td>-0.2794</td>
-      <td>0.1537</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-0.0000</td>
-      <td>1.0000</td>
-      <td>0.0000</td>
-      <td>1.0000</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>0</td>
-      <td>4.0000</td>
-      <td>FORD</td>
-      <td>FOCUS</td>
-      <td>69367.0000</td>
-      <td>3913.0000</td>
-      <td>5054.0000</td>
-      <td>7723.0000</td>
-      <td>8707.0000</td>
-      <td>19638</td>
-      <td>33619</td>
-      <td>FL</td>
-      <td>4000.0000</td>
-      <td>0</td>
-      <td>1020.0000</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FOCUS 2D COUPE ZX3</td>
-      <td>17341.7500</td>
-      <td>0.0222</td>
-      <td>-0.2085</td>
-      <td>-0.4821</td>
-      <td>-0.5406</td>
-      <td>0.2550</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>1</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-0.0000</td>
-      <td>1.0000</td>
-      <td>0.0000</td>
-      <td>1.0000</td>
-    </tr>
-  </tbody>
-</table>
-</div>
+       MMRAcquisitionRetailAveragePrice  MMRAcquisitonRetailCleanPrice  BYRNO   
+    0                        11636.0000                     13600.0000  21973  \
+    1                        10897.0000                     12572.0000  19638   
+    2                         6943.0000                      8457.0000  19638   
+    3                         4658.0000                      5690.0000  19638   
+    4                         7723.0000                      8707.0000  19638   
+
+      VNZIP1 VNST  VehBCost IsOnlineSale  WarrantyCost  EngineV6  EngineV8   
+    0  33619   FL 7100.0000            0     1113.0000         0         0  \
+    1  33619   FL 7600.0000            0     1053.0000         0         0   
+    2  33619   FL 4900.0000            0     1389.0000         1         0   
+    3  33619   FL 4100.0000            0      630.0000         0         0   
+    4  33619   FL 4000.0000            0     1020.0000         0         0   
+
+       EngineI4  Engine4C  Engine6C  2WD  4WD  AWD  FWD  RWD  ChassisWagon   
+    0         0         0         0    0    0    0    0    0             0  \
+    1         0         0         0    1    0    0    0    0             0   
+    2         0         0         0    0    0    0    0    0             0   
+    3         0         0         0    0    0    0    0    0             0   
+    4         0         0         0    0    0    0    0    0             0   
+
+       ChassisSedan  ChassisCoupe  ChassisHatch  ChassisConvertible  FourDoors   
+    0             1             0             0                   0          1  \
+    1             0             0             0                   0          0   
+    2             1             0             0                   0          1   
+    3             1             0             0                   0          1   
+    4             0             1             0                   0          0   
+
+                               ModelSubModel  MilesPerYear  PremiumAuctionAvg   
+    0                      MAZDA3 4D SEDAN I    29682.0000            -0.1294  \
+    1  1500 RAM PICKUP 2WD QUAD CAB 4.7L SLT    18718.6000             0.1088   
+    2            STRATUS V6 4D SEDAN SXT FFV    18451.7500             0.5303   
+    3                          NEON 4D SEDAN    13123.4000             1.1659   
+    4                     FOCUS 2D COUPE ZX3    17341.7500             0.0222   
+
+       PremiumAuctionClean  PremiumRetailAvg  PremiumRetailClean  WarrantyRatio   
+    0              -0.2776           -0.3898             -0.4779         0.1568  \
+    1              -0.0934           -0.3026             -0.3955         0.1386   
+    2               0.0294           -0.2943             -0.4206         0.2835   
+    3               0.5327           -0.1198             -0.2794         0.1537   
+    4              -0.2085           -0.4821             -0.5406         0.2550   
+
+       Auction_ADESA  Auction_OTHER  VehYear_2006.0  VehYear_2004.0   
+    0              1              0               1               0  \
+    1              1              0               0               1   
+    2              1              0               0               0   
+    3              1              0               0               1   
+    4              1              0               0               0   
+
+       VehYear_2005.0  VehYear_2007.0  VehYear_2001.0  VehYear_2003.0   
+    0               0               0               0               0  \
+    1               0               0               0               0   
+    2               1               0               0               0   
+    3               0               0               0               0   
+    4               1               0               0               0   
+
+       VehYear_2002.0  VehYear_2008.0  VehYear_2009.0  Color_RED  Color_WHITE   
+    0               0               0               0          1            0  \
+    1               0               0               0          0            1   
+    2               0               0               0          0            0   
+    3               0               0               0          0            0   
+    4               0               0               0          0            0   
+
+       Color_MAROON  Color_SILVER  Color_BLACK  Color_GOLD  Color_GREY   
+    0             0             0            0           0           0  \
+    1             0             0            0           0           0   
+    2             1             0            0           0           0   
+    3             0             1            0           0           0   
+    4             0             1            0           0           0   
+
+       Color_BLUE  Color_BEIGE  Color_PURPLE  Color_ORANGE  Color_GREEN   
+    0           0            0             0             0            0  \
+    1           0            0             0             0            0   
+    2           0            0             0             0            0   
+    3           0            0             0             0            0   
+    4           0            0             0             0            0   
+
+       Color_BROWN  Color_YELLOW  Color_NOT AVAIL  Transmission_AUTO   
+    0            0             0                0                  1  \
+    1            0             0                0                  1   
+    2            0             0                0                  1   
+    3            0             0                0                  1   
+    4            0             0                0                  0   
+
+       WheelType_Alloy  WheelType_Covers  WheelType_Other   
+    0                1                 0                0  \
+    1                1                 0                0   
+    2                0                 1                0   
+    3                1                 0                0   
+    4                0                 1                0   
+
+       Nationality_OTHER ASIAN  Nationality_AMERICAN  Nationality_TOP LINE ASIAN   
+    0                        1                     0                           0  \
+    1                        0                     1                           0   
+    2                        0                     1                           0   
+    3                        0                     1                           0   
+    4                        0                     1                           0   
+
+       Size_MEDIUM  Size_LARGE TRUCK  Size_COMPACT  Size_LARGE  Size_VAN   
+    0            1                 0             0           0         0  \
+    1            0                 1             0           0         0   
+    2            1                 0             0           0         0   
+    3            0                 0             1           0         0   
+    4            0                 0             1           0         0   
+
+       Size_MEDIUM SUV  Size_LARGE SUV  Size_SPECIALTY  Size_SPORTS   
+    0                0               0               0            0  \
+    1                0               0               0            0   
+    2                0               0               0            0   
+    3                0               0               0            0   
+    4                0               0               0            0   
+
+       Size_CROSSOVER  Size_SMALL SUV  PurchaseYear_2009  PRIMEUNIT_YES   
+    0               0               0                  1              0  \
+    1               0               0                  1              0   
+    2               0               0                  1              0   
+    3               0               0                  1              0   
+    4               0               0                  1              0   
+
+       PRIMEUNIT_NO  AUCGUART_GREEN  AUCGUART_RED  PurchaseMonth_sin   
+    0             0               0             0            -0.0000  \
+    1             0               0             0            -0.0000   
+    2             0               0             0            -0.0000   
+    3             0               0             0            -0.0000   
+    4             0               0             0            -0.0000   
+
+       PurchaseMonth_cos  PurchaseDay_sin  PurchaseDay_cos  
+    0             1.0000           0.0000           1.0000  
+    1             1.0000           0.0000           1.0000  
+    2             1.0000           0.0000           1.0000  
+    3             1.0000           0.0000           1.0000  
+    4             1.0000           0.0000           1.0000  
 
 ## Preprocessing pipeline
 
@@ -3059,91 +2425,38 @@ df_scores = pd.DataFrame(
   "Threshold prob. at best F1": threshold_probs_best.values()
   }, index = preds_dict.keys()
 )
-df_scores
+print(df_scores)
 ```
 
 </details>
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
 
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
+                Avg. precision (PRAUC)  Brier score (class weighted)   
+    Dummy                       0.1226                        0.3925  \
+    Logistic                    0.4167                        0.1959   
+    SVM                         0.3437                        0.2098   
+    XGBoost                     0.4674                        0.1920   
+    Neural net                  0.4337                        0.3138   
 
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>Avg. precision (PRAUC)</th>
-      <th>Brier score (class weighted)</th>
-      <th>Brier skill score (class weighted)</th>
-      <th>Best F1 score</th>
-      <th>Precision at best F1</th>
-      <th>Recall at best F1</th>
-      <th>Threshold prob. at best F1</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>Dummy</th>
-      <td>0.1226</td>
-      <td>0.3925</td>
-      <td>0.0000</td>
-      <td>0.2184</td>
-      <td>0.1226</td>
-      <td>1.0000</td>
-      <td>0.1226</td>
-    </tr>
-    <tr>
-      <th>Logistic</th>
-      <td>0.4167</td>
-      <td>0.1959</td>
-      <td>0.5009</td>
-      <td>0.4069</td>
-      <td>0.4310</td>
-      <td>0.3854</td>
-      <td>0.6338</td>
-    </tr>
-    <tr>
-      <th>SVM</th>
-      <td>0.3437</td>
-      <td>0.2098</td>
-      <td>0.4655</td>
-      <td>0.3696</td>
-      <td>0.3495</td>
-      <td>0.3922</td>
-      <td>0.6537</td>
-    </tr>
-    <tr>
-      <th>XGBoost</th>
-      <td>0.4674</td>
-      <td>0.1920</td>
-      <td>0.5109</td>
-      <td>0.4225</td>
-      <td>0.4434</td>
-      <td>0.4035</td>
-      <td>0.6432</td>
-    </tr>
-    <tr>
-      <th>Neural net</th>
-      <td>0.4337</td>
-      <td>0.3138</td>
-      <td>0.2004</td>
-      <td>0.3966</td>
-      <td>0.3766</td>
-      <td>0.4188</td>
-      <td>0.1855</td>
-    </tr>
-  </tbody>
-</table>
-</div>
+                Brier skill score (class weighted)  Best F1 score   
+    Dummy                                   0.0000         0.2184  \
+    Logistic                                0.5009         0.4069   
+    SVM                                     0.4655         0.3696   
+    XGBoost                                 0.5109         0.4225   
+    Neural net                              0.2004         0.3966   
+
+                Precision at best F1  Recall at best F1   
+    Dummy                     0.1226             1.0000  \
+    Logistic                  0.4310             0.3854   
+    SVM                       0.3495             0.3922   
+    XGBoost                   0.4434             0.4035   
+    Neural net                0.3766             0.4188   
+
+                Threshold prob. at best F1  
+    Dummy                           0.1226  
+    Logistic                        0.6338  
+    SVM                             0.6537  
+    XGBoost                         0.6432  
+    Neural net                      0.1855  
 
 ### Precision - recall curves
 
@@ -3243,7 +2556,7 @@ _ = fig.suptitle("F1 - precision - recall scores across threshold probabilities"
 _ = sns.lineplot(
   ax = ax[0], 
   x = "Threshold prob.", y = "Score", hue = "Metric", 
-  data = df_f1_logistic)
+  data = df_f1_logistic, legend =  False)
 _ = ax[0].set_title("Logistic")
 
 # SVM
@@ -3264,7 +2577,7 @@ _ = ax[2].set_title("XGBoost")
 _ = sns.lineplot(
   ax = ax[3], 
   x = "Threshold prob.", y = "Score", hue = "Metric", 
-  data = df_f1_nn, legend = False)
+  data = df_f1_nn, legend = True)
 _ = ax[3].set_title("Neural net")
 plt.show()
 plt.close("all")
@@ -3322,9 +2635,10 @@ _ = sns.histplot(
   x = "Prob. predictions", 
   hue = "Actual labels",
   multiple = "stack",
-  data = df_preds_logistic)
+  data = df_preds_logistic,
+  legend = False)
 _ = ax[0].set_title("Logistic")
-_ = ax[0].set_ylabel("N. of times predicted")
+_ = ax[0].set_ylabel("")
 
 # SVM
 _ = sns.histplot(
@@ -3335,7 +2649,7 @@ _ = sns.histplot(
   data = df_preds_svm,
   legend = False)
 _ = ax[1].set_title("SVM")
-_ = ax[1].set_ylabel("N. of times predicted")
+_ = ax[1].set_ylabel("")
 
 # XGBoost
 _ = sns.histplot(
@@ -3346,7 +2660,7 @@ _ = sns.histplot(
   data = df_preds_xgb,
   legend = False)
 _ = ax[2].set_title("XGBoost")
-_ = ax[2].set_ylabel("N. of times predicted")
+_ = ax[2].set_ylabel("")
 
 # NN
 _ = sns.histplot(
@@ -3355,7 +2669,7 @@ _ = sns.histplot(
   hue = "Actual labels",
   multiple = "stack",
   data = df_preds_nn,
-  legend = False)
+  legend = True)
 _ = ax[3].set_title("Neural net")
 _ = ax[3].set_xlabel("Probability predictions for positive class")
 _ = ax[3].set_ylabel("N. of times predicted")
@@ -3560,6 +2874,8 @@ _ = sns.lineplot(
   data = df_long, x = "Threshold", y = "Profits", hue = "Model")
 _ = ax[0].set_xlabel("Threshold probability")
 _ = ax[0].set_ylabel("Profits, $mil")
+_ = ax[0].legend(
+  title = "Model", bbox_to_anchor=(1.05, 1.0), fontsize="small", loc='best')
   
 _ = sns.lineplot(
   ax = ax[1],
@@ -3601,77 +2917,25 @@ df_optimal["Profits"] = df_optimal["Profits"] / 1e6
 
 # Rename columns  
 df_optimal = df_optimal.rename({
-  "Threshold": "Threshold prob.",
+  "Threshold": "Optimal threshold prob.",
   "Purchases": "N. cars purchased",
   "Profits": "Profits, $mil"
 }, axis = 1)
 
-df_optimal
+# Reorder columns
+df_optimal = df_optimal[[
+  "Model", "Optimal threshold prob.", "N. cars purchased", "Profits, $mil"]]
+
+print(df_optimal)
 ```
 
 </details>
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
 
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>Threshold prob.</th>
-      <th>N. cars purchased</th>
-      <th>Profits, $mil</th>
-      <th>Model</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>1888</th>
-      <td>0.1300</td>
-      <td>300</td>
-      <td>0.0246</td>
-      <td>Dummy</td>
-    </tr>
-    <tr>
-      <th>6916</th>
-      <td>0.4700</td>
-      <td>10100</td>
-      <td>3.2831</td>
-      <td>Logistic</td>
-    </tr>
-    <tr>
-      <th>7641</th>
-      <td>0.5200</td>
-      <td>10100</td>
-      <td>2.7828</td>
-      <td>SVM</td>
-    </tr>
-    <tr>
-      <th>6911</th>
-      <td>0.4700</td>
-      <td>9600</td>
-      <td>3.2962</td>
-      <td>XGBoost</td>
-    </tr>
-    <tr>
-      <th>2562</th>
-      <td>0.1700</td>
-      <td>9700</td>
-      <td>3.1537</td>
-      <td>Neural net</td>
-    </tr>
-  </tbody>
-</table>
-</div>
+               Model Optimal threshold prob. N. cars purchased Profits, $mil
+    1888       Dummy                  0.1300               300        0.0246
+    6916    Logistic                  0.4700             10100        3.2831
+    7641         SVM                  0.5200             10100        2.7828
+    6911     XGBoost                  0.4700              9600        3.2962
+    2562  Neural net                  0.1700              9700        3.1537
 
 ## Conclusions
