@@ -12,9 +12,11 @@ execute:
 
 ## Introduction
 
-Classification, imbalanced data, loss functions. Deep learning & SGD
+In this report, we'll build and test binary classification algorithms on a dataset of used cars up for sale. Our goal is to predict if a car is a "kick": A car that is heavily damaged or unusable, and should not be purchased. The dataset was sourced from [OpenML](https://www.openml.org/search?type=data&sort=runs&id=41162&status=active), and was apparently used for a past [Kaggle competition](https://www.kaggle.com/competitions/DontGetKicked/overview), and possibly for a [Chalearn](http://www.chalearn.org/) competition.
 
-Dataset information and source
+We will test logistic regression, support vector machine and XGBoost classifiers with scikit-learn. As the dataset is quite large, we'll train our logistic regression & SVM models with Stochastic Gradient Descent. We'll also build a deep neural network model with PyTorch Lightning, and compare the performance of all models, both with classification performance metrics, and with a sensitivity analysis based on a hypothetical business scenario. We'll carry out hyperparameter tuning on all models with the Optuna framework.
+
+Our target variable is highly imbalanced, as positive observations are strongly in the minority. Training classifiers and evaluating their performance can be tricky in such cases. To try and address the imbalance, we'll train our scikit-learn models with class weights, use focal loss as our loss function for the neural network, and use suitable performance metrics & plots to correctly assess performance.
 
 ## Setup
 
@@ -92,6 +94,8 @@ warnings.filterwarnings("ignore", ".*does not have many workers.*")
 
 ## Data cleaning
 
+We load our dataset, which is in .arff format, and carry out some data cleaning operations. Most of the operations are explained in the code comments, so I'll keep the text to a minimum in this section.
+
 ```{python LoadData}
 
 # Load raw data
@@ -103,6 +107,8 @@ df = pd.DataFrame(raw_data[0])
 # Print first & last 5 rows, all columns
 print(df)
 ```
+
+The categorical variables in the dataset have the bytes datatype, which need to be converted to strings. Also, some missing values are recorded as "?", which will be replaced with proper missing values.
 
 ```{python ConvertColumns}
 
@@ -120,11 +126,15 @@ for column in object_cols:
 del column
 ```
 
+We have missing values in several columns. Two columns, PRIMEUNIT and AUCGUART are missing to a high degree. We'll inspect and handle each column one by one.
+
 ```{python MissingValues}
 
 # Print n. of missing values in each column
 pd.isnull(df).sum()
 ```
+
+The target variable is highly imbalanced.
 
 ```{python TargetBalance}
 
@@ -148,23 +158,33 @@ df["Auction"].value_counts(normalize = True)
 ```{python VehYearAge}
 
 # Vehicle years range from 2001 to 2010
-print(df[["VehYear", "VehicleAge"]].describe())
+print(
+  df[["VehYear", "VehicleAge"]].describe()
+  )
 
 # Purchase age almost always matches PurchYear - VehYear.
 purch_year = df["PurchDate"].dt.year
 veh_year = df["VehYear"]
 
-print("\nCases where purchase year - vehicle year = vehicle age: " + str(((purch_year - veh_year) == df["VehicleAge"]).sum()))
+print("\nCases where purchase year - vehicle year = vehicle age: " + 
+      str(((purch_year - veh_year) == df["VehicleAge"]).sum())
+      )
 ```
+
+The "Make" column records the car's brand, and has many categorical levels (high cardinality), though there are columns with many more. Some of these brands are sub-brands of others. For example, Scion is a sub-brand of Toyota, and Infiniti is a sub-brand of Nissan. We could recode these to reduce cardinality, but most of these sub-brands offer cars of higher segments compared to the main brands (mainly in the US), so keeping them separate could be more useful.
 
 ```{python Make}
 
 # There are brands with very few observations.
-print(df["Make"].value_counts())
+print(
+  df["Make"].value_counts()
+  )
 
 # Recode TOYOTA SCION into SCION
 df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
 ```
+
+The "Model" column records the car model. There are more than 1000+ models, so if we want to use this column as a feature, we'll likely use target encoding. More on this in the feature engineering & preprocessing sections.
 
 ```{python Model}
 
@@ -172,11 +192,15 @@ df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
 df["Model"].value_counts() 
 ```
 
+Trim refers to slightly different versions / packages of a car model. These values are meaningless, and possibly misleading without the associated model value.
+
 ```{python Trim}
 
 # 134 trims, many with only 1 observation. 2360 missing values.
 df["Trim"].value_counts() 
 ```
+
+We also have submodels, which are also likely meaningless or misleading without the main model value. This column offers information such as the car's drivetrain, engine type or chassis type.
 
 ```{python SubModel}
 
@@ -193,7 +217,7 @@ df["SubModel"].value_counts()
 ```{python Cars}
 
 # 3000+ unique cars in dataset (some could be different namings / spellings of the same car)
-(df["Model"] + df["Trim"] + df["SubModel"]).value_counts()
+(df["Model"] + " " + df["Trim"] + " " + df["SubModel"]).value_counts()
 ```
 
 ```{python Color}
@@ -203,14 +227,18 @@ print(df["Color"].value_counts())
 df.loc[pd.isna(df["Color"]), "Color"] = "NOT AVAIL"
 ```
 
+Some of the missing values in our data can be manually worked out from the car model, or other information. Transmission is one such column.
+
 ```{python Transmission}
 
-# 9 missing values from transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
+# 9 missing values for transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
 print(df["Transmission"].value_counts())
 
 # Replace "Manual" with MANUAL in transmission
 df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
 ```
+
+We'll print the model information for cars with missing Transmission values. We can then fill these in with manual search (or personal interest & knowledge in my case). We'll apply this method to several other columns with missing values.
 
 ```{python TransmissionNAs}
 
@@ -223,6 +251,8 @@ transmission_nas = ["AUTO", "MANUAL", "MANUAL", "MANUAL", "AUTO", "MANUAL", "MAN
 df.loc[pd.isna(df["Transmission"]), "Transmission"] = transmission_nas
 ```
 
+There are two columns that record essentially the same information: WheelType and WheelTypeID. We'll keep only one, and recode the missing values simply as "Other".
+
 ```{python Wheel}
 
 # 3169 missing values in WheelTypeID, 3174 in WheelType. Crosscheck these columns.
@@ -234,26 +264,27 @@ print(df["WheelType"].value_counts())
 ```{python WheelNAs}
 
 print("N. of WheelTypeID NAs that are also WheelType NAs: " + 
-str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
-)
+      str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
+      )
 
-print("Remaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
-df.loc[df["WheelTypeID"] == "0", "WheelType"]
+print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: " +
+      str(df.loc[df["WheelTypeID"] == "0", "WheelType"])
+      )
 ```
 
 ```{python WheelIDvsType}
 
-print("Cases where WheelTypeID 1 = WheelType Alloy: " + str(
-  (df.loc[df["WheelTypeID"] == "1", "WheelType"] == "Alloy").sum()
-))
+print("Cases where WheelTypeID 1 = WheelType Alloy: " + 
+      str((df.loc[df["WheelTypeID"] == "1", "WheelType"] == "Alloy").sum())
+      )
 
-print("Cases where WheelTypeID 2 = WheelType Covers: " + str(
-  (df.loc[df["WheelTypeID"] == "2", "WheelType"] == "Covers").sum()
-))
+print("Cases where WheelTypeID 2 = WheelType Covers: " + 
+      str((df.loc[df["WheelTypeID"] == "2", "WheelType"] == "Covers").sum())
+      )
 
-print("Cases where WheelTypeID 3 = WheelType Special: " + str(
-  (df.loc[df["WheelTypeID"] == "3", "WheelType"] == "Special").sum()
-))
+print("Cases where WheelTypeID 3 = WheelType Special: " + 
+      str((df.loc[df["WheelTypeID"] == "3", "WheelType"] == "Special").sum())
+      )
 ```
 
 ```{python DropWheelID}
@@ -291,14 +322,18 @@ print("Rows with Size values missing: ")
 print(df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]])
 
 print("\nSize values of other rows with same model: ")
-print(df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
-df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
-df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0] + "\n" +
-df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0])
+print(
+  df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
+  df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
+  df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0] + "\n" +
+  df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0]
+      )
 
 size_nas = ["LARGE TRUCK", "MEDIUM SUV", "MEDIUM", "SMALL SUV", "SMALL SUV"]
 df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
 ```
+
+We have a column that records whether a car's make is GM, Chrysler, Ford, or another brand. I doubt we need this, as this information is already built-in to the Make column.
 
 ```{python Top3}
 
@@ -307,13 +342,22 @@ print(df["TopThreeAmericanName"].value_counts())
 df = df.drop("TopThreeAmericanName", axis = 1)
 ```
 
+There are several columns that record the MMR values of the cars. MMR stands for Manheim Market Report, a valuation offered by Manheim, a car auction company.
+
+-   The MMR columns titled "Acquisition" record the MMR valuations of the car at time of purchase. There are several different valuations available, such as auction & retail prices, each for average & clean condition cars respectively.
+
+-   The MMR columns titled "Current" are the car's current MMR valuation prices. For sake of realism, we'll assume we're performing this analysis before purchasing the cars, so we'll drop the Current MMR columns.
+
 ```{python MMR}
 
 print("Missing values in MMR columns:")
-print(pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
+print(pd.isnull(
+      df[['MMRAcquisitionAuctionAveragePrice',   'MMRAcquisitionAuctionCleanPrice',
        'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
        'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
-       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum())
+       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]
+        ).sum()
+      )
        
 # Drop current MMR prices to make the exercise more realistic
 df = df.drop([
@@ -325,22 +369,32 @@ df = df.drop([
 
 # Some MMR values are zero
 print("N. of rows with at least one MMR value of 0: " + 
-      str(len(df.loc[
+      str(
+        len(
+        df.loc[
         (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
         (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
         (df["MMRAcquisitionRetailAveragePrice"] == 0) |
         (df["MMRAcquisitonRetailCleanPrice"] == 0)
-        ]))) 
+        ]
+          )
+        )
+      ) 
 
 
 # Some MMR values are one
 print("N. of rows with at least one MMR value of 1: " + 
-      str(len(df.loc[
+      str(
+        len(
+        df.loc[
         (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
         (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
         (df["MMRAcquisitionRetailAveragePrice"] == 1) |
         (df["MMRAcquisitonRetailCleanPrice"] == 1)
-       ]))) 
+       ]
+          )
+        )
+      ) 
 
   
 # Drop rows with NAs in MMR
@@ -349,16 +403,24 @@ df = df.dropna(subset = [
   'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice'])
 
 # Drop rows with 0s in MMR
-df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
+df = df.loc[
+  (df["MMRAcquisitionAuctionAveragePrice"] > 0) &
   (df["MMRAcquisitionAuctionCleanPrice"] > 0) &
   (df["MMRAcquisitionRetailAveragePrice"] > 0) &
   (df["MMRAcquisitonRetailCleanPrice"] > 0)].copy()
 ```
 
+The PRIMEUNIT and AUCGUART columns mostly consist of missing values. But for rows with known values, they could be important predictors.
+
+-   PRIMEUNIT records whether a car attracted unusually high demand. "YES" values are very rare even among non-missing rows. The missing values could simply mean "NO".
+
+-   AUCGUART records the level of inspection passed by a car before being auctioned. "GREEN" means fully inspected, "YELLOW" means partially inspected, "RED" means "you buy what you see". There are no "YELLOW" values in the data, which means the missing values could simply mean "YELLOW".
+
+-   For both columns, we'll recode missing values as "UNKNOWN". Later we'll have options to handle these based on the categorical encoding method we use.
+
 ```{python PRIMEUNIT}
 
-# 95% missing column. Missing values possibly mean NO. YES means there was unusual
-# demand for the car.
+# 95% missing column
 print(df["PRIMEUNIT"].value_counts(normalize = True))
 
 # Fill NAs in PRIMEUNIT with UNKNOWN.
@@ -367,8 +429,7 @@ df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
 
 ```{python AUCGUART}
 
-# 95% missing column. AUCGUART is the vehicle inspection level at auction. Green
-# means inspected, yellow means partial information available, red means you buy what you see. Could assume yellow for missing values.
+# 95% missing column
 print(df["AUCGUART"].value_counts(normalize = True))
 
 # Fill NAs in AUCGUART with UNKNOWN.
@@ -393,12 +454,16 @@ df["VNZIP1"].value_counts()
 df["VNST"].value_counts()
 ```
 
+Vehicle purchase price is likely an important predictor, which is why we'll drop the few rows with missing purchase prices. There is one car with a purchase price of 1, which may mean it was a symbolic transaction. We'll keep this row for now, to avoid data loss.
+
 ```{python Price}
 
 # VehBCost is purchase price. 68 missing values, drop these rows. One car has a purchase price of 1.
-df["VehBCost"].describe()
+print(df["VehBCost"].describe())
 df = df.dropna(subset = "VehBCost")
 ```
+
+Warranty cost is paid for 36 months worth of warranty, or until the car racks up 36k miles. Likely another important predictor, especially relative to the purchase price.
 
 ```{python Warranty}
 
@@ -408,6 +473,8 @@ df["WarrantyCost"].describe()
 
 ## Feature engineering
 
+We can create some new features from our existing ones. We can also explicitly map some interaction terms, to make them easier to discover for some models.
+
 ```{python TimeFeatures}
 
 # Time features from date: Purchase year, month, day of week
@@ -416,6 +483,8 @@ df["PurchaseMonth"] = df["PurchDate"].dt.month
 df["PurchaseDay"] = df["PurchDate"].dt.weekday
 df = df.drop("PurchDate", axis = 1)
 ```
+
+The model and submodel names incorporate plenty of technical information on the cars. We'll create numerous binary columns that flag various traits of a car: Engine type, drivetrain type, chassis type and number of doors. I also thought about retrieving engine displacement in liters as a numeric feature, but this information is not openly stated for many cars, and would raise many missing values.
 
 ```{python EngineDrivetrain}
 
@@ -475,6 +544,8 @@ df.loc[pd.isnull(df["FourDoors"]), "FourDoors"] = [
 df["FourDoors"] = df["FourDoors"].astype(int)
 ```
 
+I decided to combine Model & SubModel to have one "car" feature. This column will have very high cardinality, but we'll use target encoding, and models with this feature performed slightly better than models without it. I did not include Trim in this feature, but it's possible to give it a try.
+
 ```{python ModelSubModel}
 
 # Recode SubModel NAs into empty string
@@ -486,6 +557,8 @@ df["ModelSubModel"] = df["Model"] + " " + df["SubModel"]
 # Drop trim, submodel
 df = df.drop(["Trim", "SubModel"], axis = 1)
 ```
+
+Some obvious interaction features we can add are miles traveled per year, the premium / discount paid on the MMR prices, and the warranty cost to purchase price ratio.
 
 ```{python MilesPerYear}
 
@@ -506,6 +579,8 @@ df["PremiumRetailAvg"] = (df["VehBCost"] - df["MMRAcquisitionRetailAveragePrice"
 df["PremiumRetailClean"] = (df["VehBCost"] - df["MMRAcquisitonRetailCleanPrice"]) / df["MMRAcquisitonRetailCleanPrice"]
 ```
 
+The row with a purchase price of 1 results in an astronomically high value for the warranty cost / purchase price feature, so we drop it after all. We have plenty of data, and it's likely better to keep it accurate.
+
 ```{python WarrantyRatio}
 
 # Warranty ratio to purchase price
@@ -515,6 +590,16 @@ df["WarrantyRatio"] = df["WarrantyCost"] / df["VehBCost"]
 print(df[["VehBCost", "WarrantyRatio"]].sort_values(by = "WarrantyRatio", ascending = False).iloc[0])
 df = df.loc[df["VehBCost"] != 1].copy()
 ```
+
+Most machine learning algorithms require all features to be numeric. We'll use one-hot encoding for most of our categorical columns.
+
+-   This can be done before splitting training & testing data, as it won't leak information from the testing set. However, we can't use this approach in future prediction sets if they have new categorical levels unseen in our training data.
+
+-   Adding too many columns may cause our models to suffer from the curse of dimensionality, which affects different algorithms in different ways. We'll one-hot encode only the columns with relatively fewer levels, and leave the high cardinality columns to target encoding.
+
+-   A categorical column with N levels can be encoded with N-1 binary columns, as the Nth value will be reflected by all columns taking the value of 0. We'll take advantage of this to keep our column count low.
+
+-   We'll also create binary columns only for known values of PRIMEUNIT and AUCGUART, effectively encoding the missing values as 0 for all binary columns.
 
 ```{python OneHotEncode}
 
@@ -535,6 +620,14 @@ df["AUCGUART_RED"] = (df["AUCGUART"] == "RED").astype(int)
 df = df.drop(["PRIMEUNIT", "AUCGUART"], axis = 1)
 ```
 
+Month and day of week are cylical features: The "distance" between month 1 and month 12 is not eleven, it is one.
+
+-   Simply label encoding the months as 1-12 would mislead our models.
+
+-   Instead, we'll use cyclical encoding, which encodes our features with a sine and cosine pair, conveying their cyclical nature.
+
+-   Another option is one-hot encoding, but it creates considerably more columns than cyclical encoding. It could also be advantageous to avoid "splitting" related information into many columns, to ensure they are evaluated together.
+
 ```{python CyclicalEncode}
 
 # Cyclical encode month and day of week features
@@ -542,6 +635,8 @@ encoder_cyclical = CyclicalFeatures(
   variables = ["PurchaseMonth", "PurchaseDay"], drop_original = True)
 df = encoder_cyclical.fit_transform(df)
 ```
+
+Our final feature set has 90 columns, while the original data had 33. The remaining, high-cardinality categorical features will be target encoded, which won't add any more columns.
 
 ```{python ViewFeatures}
 
@@ -551,8 +646,13 @@ print(df.head())
 
 ## Preprocessing pipeline
 
-```{python TrainTestSplit}
+The rest of our preprocessing will take place in a scikit-learn pipeline, to ensure we avoid any target leakage, and to keep our modeling workflow clean.
 
+-   First, we'll set aside 20% of our data for testing. We'll ensure the split is performed with stratification: We want to maintain the target class balance as much as possible.
+
+-   We'll use the remaining 80% for hyperparameter tuning and validation. We'll test the final models with the best hyperparameters on the testing data.
+
+```{python TrainTestSplit}
 
 # Split target and features
 y = df["IsBadBuy"].astype(int)
@@ -564,6 +664,24 @@ x_train, x_test, y_train, y_test = train_test_split(
   x, y, test_size = 0.2, random_state = 1923, stratify = y
   )
 ```
+
+We will use several target encoders to encode the remaining, high-cardinality features.
+
+-   Target encoders derive a numeric value based on the target values for each categorical level. This brings the obvious risk of leaking the target values from the testing data if not applied properly.
+
+-   Another potential issue is overfitting: If a categorical level has very few observations, the value derived from the target will be unreliable.
+
+    -   The target encoder applies a form of regularization to alleviate this: The encoded value for infrequent categorical levels are blended with the values for all observations. The degree of this regularization can be controlled by the parameters `min_sample_leaf` and `smoothing` in [target_encoder](https://contrib.scikit-learn.org/category_encoders/targetencoder.html).
+
+    -   The target encoder can also make use of a hierarchy of columns: Categorical levels of one column may be subsets of another column. We have two such hierarchies in our data: The make-model-submodel hierarchy, and the states-zipcodes hierarchy.
+
+    -   We'll map the target encoders for these columns with their respective hierarchies, so regularization can be applied by blending in the hierarchy values instead of values for all observations.
+
+-   Aside from these risks and considerations, target encoding brings several benefits:
+
+    -   It does not create any new columns, and it does not split the information for one feature into several columns.
+
+    -   It is also able to handle any missing values or previously unseen categorical levels in prediction data, by applying the encoded values for all observations, or the values for the hierarchy, as done in regularization.
 
 ```{python TargetEncoders}
 
@@ -591,6 +709,24 @@ encode_target_zip = TargetEncoder(cols = ["VNZIP1"], hierarchy = hier_states)
 # Target encoder: Make, buyer, state encoded without hierarchy (apply last):
 encode_target = TargetEncoder(cols = ["Make", "BYRNO", "VNST"])
 ```
+
+Many machine learning algorithms can be sensitive to the value scales of features.
+
+-   Those with very large absolute values may dominate training, and prevent smaller-scale values from having much effect.
+
+-   All our models except the tree-based XGBoost algorithm can be sensitive to scale. Especially neural networks can suffer from various numerical stability issues in training.
+
+-   We'll scale all features between 0 and 1 as our final preprocessing step.
+
+For hyperparameter validation, we will use 3-fold crossvalidation:
+
+-   The 80% training data will be split to 3 equal folds. Each hyperparameter configuration we evaluate will be trained on two folds, and validated on the third, for a total of three different combinations. Stratification will be applied just like in the train-test split.
+
+-   We could have more robust validation scores with more folds, but the neural network tuning can be computationally expensive, and I wanted to compare each model on "equal footing".
+
+-   An even more reliable tuning & testing scheme is nested crossvalidation: Splitting the full data into N training-testing folds (outer resampling), and splitting each training fold into K folds for parameter tuning (inner resampling). This is likely not necessary with such a big dataset.
+
+-   Since we'll build a custom model validation function for each model, we'll retrieve the train-test indices from the 3-fold CV splitter, for a total of three train-test index pairs.
 
 ```{python Pipeline}
 
@@ -632,7 +768,7 @@ Watch out for conflicts in variable names.
 def validate_logistic(
   alpha, # Regularization strength hyperparameter
   l1_ratio, # Ratio of L1 regularization hyperparameter
-  tol = 1e-4, # Min. required validation score change to count as improvement
+  tol = 1e-4, # Min. required change in validation score to count as improvement
   verbose = 0, # Set to 1 to print model training progress
   trial = None # Pass the Optuna trial if applicable
   ):
@@ -667,9 +803,9 @@ def validate_logistic(
       loss = "log_loss", # Log loss metric for probabilistic logistic regression
       penalty = "elasticnet", # Elastic net regularization: Blend of L1 and L2
       learning_rate = "optimal", # Dynamically adjusted learning rate, based on a heuristic that uses regularization strength 
-      random_state = 1923,
-      verbose = verbose,
-      n_jobs = -1,
+      random_state = 1923, # Set random seed for replicable results
+      verbose = verbose, # Whether to print training progress or not
+      n_jobs = -1, # Use all CPU cores to parallelize
       alpha = alpha, # Hyperparameters to validate
       l1_ratio = l1_ratio # Hyperparameters to validate
     )
@@ -677,7 +813,7 @@ def validate_logistic(
     # Perform epoch by epoch training with early stopping & pruning
     epoch_scores = [] # Record val. score of each epoch
     n_iter_no_change = 0 # Record epochs with no improvement
-    tol = tol
+    tol = tol # Min. change in val. score to count as improvement
     
     for epoch in range(1000):
       
@@ -685,11 +821,11 @@ def validate_logistic(
       model_logistic.partial_fit(
         x_tr, y_tr, classes = classes, sample_weight = sample_weight)
       
-      # Score epoch
+      # Predict validation set & score predictions
       y_pred = model_logistic.predict_proba(x_val)
       epoch_score = log_loss(y_val, y_pred, sample_weight = sample_weight_val)
       
-      # For first CV fold, report intermediate score of trial to Optuna
+      # For first CV fold, report intermediate score of Optuna trial if applicable 
       if (i == 0) and (trial is not None):
         trial.report(epoch_score, epoch)
       
@@ -746,7 +882,12 @@ def objective_logistic(trial):
   
   # Define hyperparameter ranges to tune over, and suggest a value for 
   # each hyperparameter
-  alpha = trial.suggest_float("reg_strength", 5e-5, 0.5, log = True)
+  alpha = trial.suggest_float(
+    "reg_strength", # Parameter name in trials result table
+    5e-5, # Minimum value to try
+    0.5, # Maximum value to try
+    log = True # Sampling from the log domain makes lower values more likely
+    )
   l1_ratio = trial.suggest_float("l1_ratio", 0, 1)
   
   # Validate the parameter set with predefined function
@@ -762,10 +903,10 @@ def objective_logistic(trial):
 
 # Create Optuna study
 study_logistic = optuna.create_study(
-  sampler = optuna.samplers.TPESampler(seed = 1923),
-  pruner = optuna.pruners.HyperbandPruner(),
+  sampler = optuna.samplers.TPESampler(seed = 1923), # Sampling algorithm
+  pruner = optuna.pruners.HyperbandPruner(), # Pruning algorithm
   study_name = "tune_logistic",
-  direction = "minimize"
+  direction = "minimize" # Objective is to minimize the reported metric
 )
 ```
 
@@ -797,7 +938,7 @@ best_trial_logistic
 ```{python ValEpochsLogistic}
 #| eval: false
 
-# Retrieve best number of epochs for optimal parameters, for each CV fold
+# Validate best number of epochs for optimal parameters, for each CV fold
 best_epochs = validate_logistic(
   alpha = best_trial_logistic["params_reg_strength"],
   l1_ratio = best_trial_logistic["params_l1_ratio"],
@@ -981,9 +1122,11 @@ best_trial_svm
 # Create pipeline with final SVM model
 pipe_svm = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
-  ("KernelTrick", RBFSampler( # Non-linear transformation of features
-      gamma = "scale",
-      n_components = 100,
+  ("KernelTrick", RBFSampler( # Non-linear transformation of features with 
+                              # RBF kernel
+      gamma = "scale", # RBF kernel parameter, left to a default heuristic
+      n_components = 100, # N. of Monte Carlo samples used to approximate 
+                          # each feature
       random_state = 1923
     )
   ),
@@ -1189,7 +1332,7 @@ class TrainDataset(torch.utils.data.Dataset):
   def __len__(self):
     return len(self.x) 
   
-  # Return a pair of features & target
+  # Return a pair of features & target (one training observation)
   def __getitem__(self, idx):
     return self.x[idx], self.y[idx]
 
@@ -1241,7 +1384,7 @@ class SeluDropoutModel(pl.LightningModule):
     self.loss_alpha = hyperparams_dict["loss_alpha"]
     self.loss_gamma = hyperparams_dict["loss_gamma"]
     
-    # Define architecture 
+    # Define network architecture 
     # Initialize layers list with first hidden layer
     self.layers_list = torch.nn.ModuleList([
       torch.nn.Linear(self.input_size, self.hidden_size), # Hidden layer 1
@@ -1249,7 +1392,7 @@ class SeluDropoutModel(pl.LightningModule):
       torch.nn.AlphaDropout(self.dropout) # Dropout 1
       ])
     
-    # Append extra hidden layers to layers list, according to hyperparameter
+    # Add extra hidden layers to layers list, according to hyperparameter
     for n in range(0, (self.n_hidden_layers - 1)):
       self.layers_list.extend([
         torch.nn.Linear(self.hidden_size, self.hidden_size), # Hidden layer N
@@ -1257,16 +1400,17 @@ class SeluDropoutModel(pl.LightningModule):
         torch.nn.AlphaDropout(self.dropout) # Dropout N
       ])
     
-    # Append output layer to layers list
+    # Add final output layer to layers list
     self.layers_list.append(
       torch.nn.Linear(self.hidden_size, 1) # Output layer
       # No sigmoid activation here, because the loss function has that built-in
       )
       
-    # Define full network from layers list
+    # Create full network from layers list
     self.network = torch.nn.Sequential(*self.layers_list)
     
-    # Sigmoid activation for prediction step only, not part of forward propagation
+    # Sigmoid activation for prediction step only, not part of forward 
+    # propagation as the loss function has sigmoid activation built in
     self.sigmoid = torch.nn.Sequential(torch.nn.Sigmoid())
       
     # Initialize weights to conform with self-normalizing SELU activation
@@ -1291,7 +1435,9 @@ class SeluDropoutModel(pl.LightningModule):
     # Loss function applies sigmoid activation before calculating focal loss
     loss = torchvision.ops.sigmoid_focal_loss(
       output, y, 
-      alpha = self.loss_alpha, gamma = self.loss_gamma, 
+      alpha = self.loss_alpha, # Positive class weight parameter
+      gamma = self.loss_gamma, # Parameter that discounts "easy" training examples 
+                               # in loss calculation
       reduction = "mean") 
     
     # Log training loss
@@ -1343,10 +1489,10 @@ class SeluDropoutModel(pl.LightningModule):
       optimizer, 
       base_lr = self.learning_rate, # Lowest LR at start of each cycle
       max_lr = (self.learning_rate * 5), # Highest LR at the end of first cycle
-      mode = "exp_range", # Exponentially decreasing maximum LR
-      gamma = 0.99995, # Decrease factor for maximum LR
-      step_size_up = 200, # Training steps to go from base LR to max. LR. 
-                          # Heuristic: (2-8 * steps (batches) in one epoch)
+      mode = "exp_range", # Exponentially decreasing max. LR
+      gamma = 0.99995, # Reduction factor for max. LR
+      step_size_up = 200, # Training steps to go from base LR to max. LR. once 
+                          # Heuristic: (2-8 * (steps (batches) in one epoch))
       cycle_momentum = False # Not compatible with Adam optimizer 
       )
     
@@ -1365,7 +1511,9 @@ class SeluDropoutModel(pl.LightningModule):
 #| code-summary: "Show Optuna pruner creation"
 
 
-# Optuna code uses pytorch_lightning namespace which causes an error with the pruning callback. Create copy of Optuna pruning callback with lightning.pytorch namespace as a workaround.
+# Optuna code uses old pytorch_lightning namespace which causes an error with the 
+# pruning callback integration. Create copy of the Optuna pruning callback with 
+# the new lightning.pytorch namespace as a workaround.
 class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1483,7 +1631,8 @@ def objective_nn(trial):
   
   # Define parameter ranges to tune over & suggest param set for trial
   n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 5)
-  hidden_size = 2 ** trial.suggest_int("hidden_size", 1, 6)
+  hidden_size = 2 ** trial.suggest_int("hidden_size", 1, 6) # Tune hidden size as
+                                                            # exponent of 2
   learning_rate = trial.suggest_float("learning_rate", 5e-4, 5e-2)
   l2 = trial.suggest_float("l2", 5e-5, 1e-2, log = True)
   dropout = trial.suggest_float("dropout", 1e-3, 0.25, log = True)
@@ -1492,7 +1641,7 @@ def objective_nn(trial):
   
   # Create hyperparameters dict
   hyperparams_dict = {
-      "input_size": 90,
+      "input_size": 90, # N. of input features
       "n_hidden_layers": n_hidden_layers,
       "hidden_size": hidden_size,
       "learning_rate": learning_rate,
@@ -1678,7 +1827,7 @@ for key in preds_dict.keys():
 #| code-summary: "Show dynamic metric calculations"
 
 
-# Retrieve F1 scores at different thresholds for each model
+# Retrieve F1 scores at different threshold probabilities for each model
 scores_f1 = {}
 scores_f1_best = {}
 
