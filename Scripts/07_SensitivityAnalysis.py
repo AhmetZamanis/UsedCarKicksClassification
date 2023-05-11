@@ -88,7 +88,8 @@ pipe_svm = Pipeline(steps = [
       random_state = 1923
     )
   ),
-  ("SVM", CalibratedClassifierCV(SGDClassifier(
+  ("SVM", CalibratedClassifierCV(
+    estimator = SGDClassifier(
       loss = "hinge",
       penalty = "elasticnet",
       alpha = best_trial_svm["params_reg_strength"],
@@ -97,7 +98,8 @@ pipe_svm = Pipeline(steps = [
       n_iter_no_change = 1000, # Ensure model doesn't early stop based on train loss
       verbose = 1,
       random_state = 1923
-      )
+      ),
+    method = "isotonic"
     )
   )
 ])

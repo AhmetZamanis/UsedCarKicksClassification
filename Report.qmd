@@ -1112,7 +1112,7 @@ In scikit-learn, a linear SVM classifier can normally be applied with [LinearSVC
 
         -   `n_components` refers to the number of Monte Carlo samples per each feature, used to approximate the RBF feature space. A higher value may increase the quality of the approximation, but we leave this default too.
 
--   After the kernel approximation, the SGDClassifier will act as a linear SVM. For this, we have to change our loss metric to **hinge loss.**
+-   After the kernel approximation, the SGDClassifier will act as a linear SVM if we change our loss metric to **hinge loss.**
 
     -   Hinge loss is the default loss metric used to train SVM models. It is calculated from the output of the decision function. It slightly penalizes even "correct" predictions if they were too close to the decision boundary, i.e. close to being misclassified. This property aims to maximize the distances between the observations and the decision boundary.
 
@@ -1275,7 +1275,8 @@ The optimal hyperparameter set has lower regularization strength compared to log
 
 We create the final SVM model, combining it with the preprocessing & kernel approximation pipeline.
 
--   We also wrap our SVM model in a [CalibratedClassiferCV](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html) object. This will approximate probability predictions from the SVM decision function, so we can calculate some performance metrics and compare with other models. The actual probabilities acquired in this manner may be unreliable.
+-   We also wrap our SVM model in a [CalibratedClassiferCV](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html) object. This will approximate probability predictions from the SVM decision function, so we can retrieve probability predictions, calculate some performance metrics that depend on them, and compare SVM with other models.
+-   Keep in mind the probabilities acquired in this manner may be unreliable. The [documentation](https://scikit-learn.org/stable/modules/calibration.html#calibration) states the default sigmoid method may be unsuitable for imbalanced problems, so we use the non-parametric, isotonic version.
 
 ```{python FinalModelSVM}
 
@@ -1291,7 +1292,7 @@ pipe_svm = Pipeline(steps = [
     )
   ),
   ("SVM", CalibratedClassifierCV( # Prob. calibrator to estimate predicted probs.
-    SGDClassifier( # Model step
+    estimator = SGDClassifier( # Model step
       loss = "hinge", # Hinge loss to train a linear SVM
       penalty = "elasticnet", # Elastic net regularization instead of default L2
       alpha = best_trial_svm["params_reg_strength"],
@@ -1300,7 +1301,8 @@ pipe_svm = Pipeline(steps = [
       n_iter_no_change = 1000, # Arbitrary high value to ensure training doesn't early stop based on training loss
       verbose = 1, # Print training progress
       random_state = 1923
-        )
+        ),
+    method = "isotonic" # Non-parametric method to estimate predicted probs.
       )
     )
   ]
