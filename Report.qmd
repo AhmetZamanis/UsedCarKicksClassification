@@ -776,35 +776,35 @@ Logistic regression predicts the log-odds of an event occurring (also called log
 
 -   The main assumption of logistic regression is a linear relationship between the predictors and the logits. The less linear the relationships are, the less accurate logistic regression will be.
 
--   Logistic regression won't find and model interaction effects unless they are explicitly mapped as features (we did this for some features).
+-   Logistic regression won't find and model interaction effects unless they are explicitly mapped as new features (we did this for some features).
 
--   Plain linear regression models can suffer from multicollinearity and high dimensionality in the feature set, but **regularization** is almost always applied to model coefficients to avoid overfitting.
+-   Plain linear regression models can suffer from multicollinearity and curse of dimensionality in the feature set, but **regularization** is almost always applied to model coefficients to avoid overfitting.
 
-    -   **L1 (lasso)** regularization can shrink model coefficients to zero, effectively dropping predictors from the model and performing feature selection.
+    -   **L1 (lasso)** regularization can potentially shrink model coefficients to zero, effectively dropping predictors from the model and performing feature selection.
 
     -   **L2 (ridge)** regularization can't shrink coefficients to zero, but just reduces their contribution to the model.
 
     -   **Elastic net** regularization is a blend of L1 and L2 regularization, controlled by a ratio parameter. This is what we will use.
 
-Logistic regression is normally fit on all training observations at once: The model coefficients are all estimated in one go using a solver algorithm (implemented with [LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html) in scikit-learn). This can be a bit slow with a large dataset like ours, especially since we'll fit hundreds of models for hyperparameter tuning. To save time, we'll train our logistic regression (and SVM) models with **stochastic gradient descent:**
+Logistic regression (implemented with [LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html) in scikit-learn) is normally fit on all training observations at once: The model coefficients are all estimated in one go using a solver algorithm. This calculation can be a bit slow with a large dataset like ours, especially since we'll fit hundreds of models for hyperparameter tuning. To save time, we'll train our logistic regression (and SVM) models with **stochastic gradient descent:**
 
 -   In SGD, the model is trained only on one observation in **one training step**. The **training error (loss)** is calculated and the model parameters are updated at every training step. When the model sees each training observation once, we complete a **training epoch.**
 
--   Training is usually **early stopped** when the validation score stops improving. This is usually assessed after each epoch.
+-   We perform multiple epochs of training. Training is usually **early stopped** when the validation score stops improving. This is usually assessed after each epoch.
 
--   This approach is similar to how neural networks are trained. A key difference is NNs use **minibatch** SGD: A training step consists of a batch of observations, which can range from 16-32 to 1024-2048 observations (usually a power of 2). It's possible to implement this manually in scikit-learn, but it likely won't bring much improvement for logistic regression or SVM.
+-   This approach is similar to how neural networks are trained. A key difference is NNs use **minibatch** SGD: A training step consists of a batch of observations, which can range from 16-32 to 1024-2048 observations (usually a power of 2). This is a faster approach than single-observation SGD. It's possible to implement this manually in scikit-learn, but it likely won't bring much improvement for logistic regression or SVM.
 
 We can train linear classification models with SGD in scikit-learn using [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html). Below, we will define a validation function that takes a set of hyperparameters, builds a logistic regression model with SGDClassifier and validates the performance of the parameter set.
 
 -   In one instance of the function, a model will be created, trained & validated for each CV fold, for a total of three times.
 
--   The model will be trained with the `.partial_fit()` method, which trains the SGDClassifier on one training observation only. We'll call the method repeatedly to train the model for several epochs. Our function will handle early stopping manually by recording each epoch's score. By default, 10 epochs with less than 0.0001 improvement in the validation error will terminate the model training.
+-   The model will be trained with the `.partial_fit()` method, which trains the SGDClassifier for only one epoch. We'll call the method repeatedly to train the model for several epochs. Our function will handle early stopping manually by recording each epoch's score. By default, 10 epochs with less than 0.0001 improvement in the validation error will terminate the model training.
 
     -   **Class weights** will be applied to both training and validation error calculations: The errors for the minority class will be penalized more heavily, forcing our models to pay more attention to them.
 
-    -   The class weight for each class will be inversely proportional to its class frequency, calculated automatically by a scikit-learn utility (only using the training data to avoid leakage). Using these class weights, we will create a sample weights vector for every observation, and pass this to the model training and scoring functions.
+    -   The class weight for each class will be inversely proportional to its class frequency, calculated automatically by a scikit-learn utility (only using the training data to avoid leakage). Using these class weights, we will create a sample weights vector for every training & validation set observation, and pass these to the model training and scoring functions respectively.
 
--   If the function is ran for an Optuna trial, it will return the average CV score of the parameter set (best epochs, not the last ones). It will also perform pruning if directed by the Optuna pruner:
+-   If the function is ran for an Optuna trial, it will return the average CV score of the parameter set (from the best epochs, not the last ones). It will also perform pruning if directed by the Optuna pruner:
 
     -   Unpromising trials (determined according to the validation scores of the first epochs) will be stopped early by the Optuna pruner. To allow pruning, the score of each epoch for the first CV fold will be reported to the Optuna study.
 
@@ -812,7 +812,7 @@ We can train linear classification models with SGD in scikit-learn using [SGDCla
 
 The SGDClassifier is a general method for training a linear model with SGD. Its parameters determine what type of linear model is trained:
 
--   The `loss` parameter sets the training loss function. For probabilistic logistic regression, we will use log loss, which compares the probability predictions to the actual target labels. We will also use log loss to score our predictions on the validation set.
+-   The `loss` parameter sets the training loss function. For probabilistic logistic regression, we will use **log loss**, which compares the probability predictions (between 0-1) to the actual target labels (0 or 1). We will also use log loss to score our predictions on the validation set.
 
 -   The `penalty` parameter sets the regularization type. We'll use elastic net regularization.
 
@@ -948,9 +948,9 @@ def validate_logistic(
 
 Next, we define the Optuna objective function for logistic regression. Here, we decide the search space for each hyperparameter we want to tune.
 
--   We'll tune `alpha` between a very small float value of 5e-5, and 0.5, though the optimal value is likely close to 0. Therefore, we will instruct Optuna to sample from the log domain:
+-   We'll tune `alpha` between a very small float value of 5e-5 and 0.5, though the optimal value is likely close to 0. Therefore, we will instruct Optuna to sample from the log domain:
 
-    -   The logarithm of the search space will be taken, values will be sampled from this space, and the exponent will be taken to return the original value. This will make lower values more likely to be suggested. We'll do this for other hyperparameters that usually take an optimal value close to 0.
+    -   The logarithm of the search space will be taken, values will be sampled from this space, and the exponent will be taken to return the original value. This will make lower values more likely to be suggested. We'll also do this for other hyperparameters in other models that usually take an optimal value closer to 0.
 
 -   `l1_ratio` is constrained between 0 and 1, so we will use that as our search space. A value of 0 will result in pure L2 regularization, and a value of 1 will result in pure L1 regularization. Anything in between is a blend of the two.
 
@@ -986,7 +986,7 @@ Now we create the Optuna study. This object will manage the tuning process and s
 
 -   We set a pruner algorithm: The pruner decides whether to complete a trial, or prune it based on its intermediate validation scores. This saves us a great deal of time by stopping unpromising trials early.
 
-    -   We use the **Hyperband** pruner algorithm, which is suggested for the TPE sampler. In short, hyperband allocates a finite budget equally to each hyperparameter configuration. There is the option to increase the budget, at the expense of eliminating configurations more aggressively (see the [documentation](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.HyperbandPruner.html) and [original paper](https://www.jmlr.org/papers/volume18/16-558/16-558.pdf) for more detail).
+    -   We use the **Hyperband** pruner algorithm, which is suggested for the TPE sampler. In short, hyperband allocates a finite budget equally to each hyperparameter configuration. There is the option to increase the total budget, at the expense of eliminating configurations more quickly (see the [documentation](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.HyperbandPruner.html) and [original paper](https://www.jmlr.org/papers/volume18/16-558/16-558.pdf) for more detail).
 
 -   We name our study, and ensure we set the correct objective: Since a lower log loss value is better, we aim to minimize the reported metric.
 
@@ -1002,11 +1002,11 @@ study_logistic = optuna.create_study(
 )
 ```
 
-We can finally run the hyperparameter optimization. It is recommended to run the TPE algorithm with 100 to 1000 trials. The models in the final edition of this report were all tuned with 500 trials.
+We can finally run the hyperparameter optimization. It is recommended to run the TPE algorithm with 100 to 1000 trials. The models in the final edition of this report were tuned with 500 or 1000 trials.
 
 -   With pruning in place, even if improvement stops after a few trials, the remaining trials will mostly be pruned.
 
--   For logistic regression, one study of 500 trials usually took around 10-15 minutes. The SGDClassifier was fully parallelized with `n_jobs = -1`.
+-   For logistic regression, one study of 500 trials usually took around 10-15 minutes. The SGDClassifier was parallelized with `n_jobs = -1` and 12 CPU cores available.
 
 ```{python OptimizeLogistic}
 #| eval: false
@@ -1018,7 +1018,7 @@ study_logistic.optimize(
   show_progress_bar = True)
 ```
 
-The trials were exported to .csv for future use, and the best set of hyperparameters will be reloaded.
+The trials were exported to .csv for future use, and the best set of hyperparameters will be imported.
 
 ```{python ExportTrialsLogistic}
 #| eval: false
@@ -1050,15 +1050,15 @@ best_epochs = validate_logistic(
   )
 ```
 
-The median best epoch for the 3 CV folds was 26, which is the number of epochs we'll use in our final logistic regression model, defined below.
+The median best epoch for the 3 CV folds was 26, which is the number of epochs we'll use in our final logistic regression model, created below.
 
 -   We combine our preprocessing pipeline with our logistic regression model, to perform all steps in one go.
 
--   We'll train our final models with the optimal hyperparameters, and the optimal number of epochs we derived from crossvalidation, with no early stopping.
+-   We'll train our final model with the optimal hyperparameters, for the optimal number of epochs we derived from crossvalidation, with no early stopping.
 
     -   Even with the built-in validation disabled, SGDClassifier performs early stopping based on the training loss.
 
-    -   This can be misleading, as lower training loss doesn't necessarily translate into better predictive performance on unseen data (in the case of overfitting). To disable this feature, we set an arbitrarily high number for the `n_iter_no_change` parameter.
+    -   This can be misleading, as lower training loss doesn't necessarily translate into better predictive performance on unseen data (in the case of overfitting). To avoid this, we set an arbitrarily high number for the `n_iter_no_change` parameter.
 
 ```{python FinalModelLogistic}
 
@@ -1094,7 +1094,7 @@ Our second model, SVM, aims to classify observations by separating them with dec
 
     -   With lower regularization, we have a smaller margin. We can separate the training observations more accurately, but this could lead to overfitting on unseen data.
 
--   SVM does not natively output probability predictions between 0 and 1. Instead, it calculates a **decision function,** based on the distance of an observation from the decision boundaries. This has implications for our performance evaluations, which we will discuss in model testing.
+-   SVM does not natively output probability predictions between 0 and 1. Instead, it calculates a **decision function,** based on the distance of an observation from the decision boundaries. This has implications for our performance evaluations, which we will discuss more in model testing.
 
 In scikit-learn, a linear SVM classifier can normally be applied with [LinearSVC](https://scikit-learn.org/stable/modules/generated/sklearn.svm.LinearSVC.html). A non-linear SVM with built-in kernel options can be applied with [SVC](https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html#sklearn.svm.SVC). Both approaches, especially the latter, will be computationally expensive with a large dataset. Just like logistic regression, we can use SGDClassifier to train our SVM much more quickly with a SGD algorithm.
 
@@ -1110,9 +1110,9 @@ In scikit-learn, a linear SVM classifier can normally be applied with [LinearSVC
 
         -   A lower `gamma` does the opposite: A decision boundary affected by observations further away, more linear and smoother. This may generalize better to new data, but may also cause underfitting.
 
-        -   `n_components` refers to the number of Monte Carlo samples per each feature, used to approximate the RBF feature space. A higher value may increase the quality of the approximation, but we leave this default too.
+        -   `n_components` refers to the number of Monte Carlo samples per each feature used to approximate the RBF feature space. A higher value may increase the quality of the approximation, but we leave this default too.
 
--   After the kernel approximation, the SGDClassifier will act as a linear SVM if we change our loss metric to **hinge loss.**
+-   After the kernel approximation gives us a non-linear feature space, the SGDClassifier will act as a linear SVM if we change our loss metric to **hinge loss.**
 
     -   Hinge loss is the default loss metric used to train SVM models. It is calculated from the output of the decision function. It slightly penalizes even "correct" predictions if they were too close to the decision boundary, i.e. close to being misclassified. This property aims to maximize the distances between the observations and the decision boundary.
 
@@ -1120,7 +1120,7 @@ In scikit-learn, a linear SVM classifier can normally be applied with [LinearSVC
 
     -   SVM is normally fit with L2 regularization only, but we'll try elastic net regularization just like with logistic regression.
 
-The validation function and the Optuna tuning process is pretty much the same with logistic regression. The code is available below.
+The validation function and the Optuna tuning process is pretty much the same with logistic regression. The code is available below. The Optuna study with 500 trials took roughly 15 minutes with 12 CPU cores available.
 
 ```{python ValSVM}
 #| code-fold: true
@@ -1271,11 +1271,11 @@ best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
 best_trial_svm
 ```
 
-The optimal hyperparameter set has lower regularization strength compared to logistic regression, but a higher ratio of L1 regularization. This could suggest the RBF transformation made our feature set more redundant, but it's likely not directly comparable across different algorithms.
+The optimal hyperparameter set has lower regularization strength compared to logistic regression, but a higher ratio of L1 regularization. This could suggest the RBF transformation made our feature set more redundant, but the parameter values are likely not directly comparable across different algorithms.
 
 We create the final SVM model, combining it with the preprocessing & kernel approximation pipeline.
 
--   We also wrap our SVM model in a [CalibratedClassiferCV](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html) object. This will approximate probability predictions from the SVM decision function, so we can retrieve probability predictions, calculate some performance metrics that depend on them, and compare SVM with other models.
+-   We also wrap our SVM model in a [CalibratedClassiferCV](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html) object. This will approximate probability values between 0 and 1 from the SVM decision function, so we can retrieve probability predictions, calculate some performance metrics that depend on them, and compare SVM with other models.
 -   Keep in mind the probabilities acquired in this manner may be unreliable. The [documentation](https://scikit-learn.org/stable/modules/calibration.html#calibration) states the default sigmoid method may be unsuitable for imbalanced problems, so we use the non-parametric, isotonic version.
 
 ```{python FinalModelSVM}
@@ -1310,6 +1310,34 @@ pipe_svm = Pipeline(steps = [
 ```
 
 ### XGBoost
+
+Next is our XGBoost model, a **gradient boosting** algorithm. Gradient boosting builds a number of models sequentially, each one trained on the prediction errors (residuals) of the previous one. The final ensemble model is a combination of all models.
+
+-   One iteration of gradient boosting (equivalent to building one model) is called a **round.** By default, XGBoost builds a **decision tree** model in each round.
+
+-   Tree-based models learn relationships & make predictions by splitting the data according to the predictor values.
+
+    -   This means they can model non-linear relationships, and find interaction effects even if they are not explicitly mapped as features.
+
+    -   However, they can't extrapolate relationships between predictors and the target outside of the observed training data.
+
+        -   For example, for a feature X and target Y, a relationship of Y = 2X will be easily modeled and predicted by a linear model, even if X takes a very large value not seen in training. A tree-based model, however, will continue predicting according to the highest X value seen in training.
+
+-   No hard assumptions are made about the data, though curse of dimensionality can make it harder to identify the optimal splits and potentially hamper prediction performance.
+
+    -   Normally, a single decision tree with too few predictors & splits will tend to underfit, and one with too many predictors & splits will tend to overfit. In XGBoost, we control the complexity of each tree with several hyperparameters. Generally, we build numerous shallow trees (called **weak learners**) and ensemble them to arrive at a robust final prediction.
+
+    -   XGBoost can apply several types of regularization & sampling to further control the tradeoff between overfitting and underfitting. Tuning the numerous hyperparameters is crucial for good performance.
+
+While there are many more hyperparameters to tune for XGBoost, the code is simpler.
+
+-   We can simply pass the validation set while training an XGBoost model, which automatically handles early stopping, records the best validation score and the best round.
+
+-   **Callbacks** are objects that monitor model training and perform a certain action based on a condition, most commonly early stopping. Optuna includes a special pruning callback integration for XGBoost, so we don't have to manually report scores to the Optuna study.
+
+-   XGBoost supports GPU training, which will save us some training time. With 1000 trials, the Optuna study took roughly 25-30 minutes.
+
+-   The `scale_pos_weight` hyperparameter can be used to balance classes in binary classification problems, but it's apparently not applied to validation score calculations (see [discussion](https://github.com/dmlc/xgboost/issues/8184)), so we create sample weight vectors and pass them to `.fit()` as we did before.
 
 ```{python ValXGB}
 #| code-fold: true
@@ -1399,6 +1427,26 @@ def validate_xgb(
     return best_epochs 
 ```
 
+Let's discuss the numerous parameters of XGBoost we will tune, and the search spaces.
+
+-   `learning_rate` is is the magnitude of the model update after each boosting round, similar to in SGD training. The same considerations as explained before apply. A general suggestion is to tune the XGBoost LR between 0.05 and 0.3 for most problems. It's also possible to use LR scheduling, but we will save this for the NN model.
+
+-   `max_depth` is the maximum depth of each tree, an integer value. A higher value will make the model more complex, and more likely to overfit. The default is 6, but we will tune it over a broad range.
+
+-   `min_child_weight` is a parameter that affects tree complexity. A higher value will make it harder for the model to justify new splits. This is usually tuned as an integer parameter.
+
+-   `gamma` is a special regularization parameter for trees. It is the minimum loss reduction required to justify another split. The optimal value is often closer to zero.
+
+-   `alpha` and `lambda` are L1 and L2 regularization respectively, applied to model weights. L1 is 0 by default, and L2 is 1 by default. We'll tune both over a wide interval to try different blends of L1 and L2 regularization.
+
+-   `subsample` and `colsample_bytree` are the subsampling parameters, both set to 1 by default (meaning no subsampling).
+
+    -   Setting a lower value for `subsample` will subsample the training observations by that ratio in every boosting round.
+
+    -   A lower value for `colsample_bytree` will subsample the training features by that ratio in every boosting round.
+
+    -   Subsampling can help make the models more robust against overfitting. It's possible to subsample features even more frequently than once per round using other hyperparameters (see [documentation](https://xgboost.readthedocs.io/en/stable/parameter.html)).
+
 ```{python ObjXGB}
 #| eval: false
 
@@ -1442,6 +1490,8 @@ best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
 best_trial_xgb
 ```
 
+The optimal set of hyperparameters yields trees on the shallow side, with some regularization. Most interesting is the `colsample_bytree` parameter: A value of roughly 0.42 means each tree is built with a subsample of 42% of the features in our data, amounting to roughly 37-38 features. More evidence that we have quite a bit of redundancy in our features.
+
 ```{python FinalModelXGB}
 
 # Create pipeline with final XGB model
@@ -1471,7 +1521,33 @@ pipe_xgb = Pipeline(steps = [
 
 ### Neural network with PyTorch
 
-#### Defining PyTorch Lightning classes
+Our final model is a neural network. There is much to explain about how NNs work, and there are many complex architectures, but I'll summarize the main idea starting from a simple linear regression:
+
+-   In a linear regression equation, the **inputs** are the features. These inputs are multiplied with their respective **weights** (coefficients) and summed up, along with a **bias** (intercept) value. This gives us the **output / prediction**.
+
+-   One such linear regression equation is equivalent to **one neuron / linear unit** in a NN. A **layer** is an organization of numerous neurons / units, or other transformations.
+
+-   The inputs of a NN are equivalent to the original features, as they are fed into the network. The **output layer** is the last layer that gives the final output / prediction of the network.
+
+-   A **hidden layer** is any layer between the network inputs and the output layer. The inputs of neurons in a hidden layer consist of the outputs of the previous layer (for the first hidden layer, simply the input features). Hidden layer neurons apply their weights and bias terms to the inputs, and pass their outputs to the next layer. A NN with at least one hidden layer is a **deep NN.**
+
+    -   We can think of a multiple linear regression model as a single neuron / linear unit with multiple inputs and one output.
+
+    -   When we train a simple linear regression model, we estimate a single coefficient for each feature, and one intercept term. In a NN, we estimate a weight for each input of each neuron, and a bias term for each neuron.
+
+**Activation functions** can be applied after a layer, to transform its outputs before passing them on to the next layer as inputs. Many activation function options exist, which apply different mathematical transformations.
+
+-   With activation functions and hidden layers, the network can learn non-linear and complex relationships.
+
+-   With a binary classification problem, a sigmoid activation function is applied to the network's final, single output, which will transform it from a predicted logit to a probability value between 0 and 1.
+
+Of course, this is the simplest summary of a typical NN. [Here](https://d2l.ai/index.html) is an excellent source for more information on many aspects of deep NNs.
+
+#### Defining PyTorch & Lightning classes
+
+To build and train our NN model, we will use the PyTorch, and the associated Lightning framework which makes it much more easier to organize PyTorch code. We'll define several custom PyTorch and Lightning classes according to our needs, based on existing class templates.
+
+First, we need to define a `Dataset` class. This class will store our data as Torch tensors. Its methods will return one row at a time, as a pair of feature tensors & target tensor, and the data length. We create a separate class for training & testing data, as the latter won't have associated target values.
 
 ```{python ClassDataset}
 #| code-fold: true
@@ -1514,6 +1590,8 @@ class TestDataset(torch.utils.data.Dataset):
   def __getitem__(self, idx):
     return self.x[idx]
 ```
+
+Next, we define our `Lightning Module`. This is the core class that will store our model architecture & hyperparameters, define our training, validation & prediction loops, and more. The explanation of each class method is better left to the code comments below. We'll discuss the model architecture and hyperparameters afterwards.
 
 ```{python ClassModule}
 #| code-fold: true
@@ -1667,6 +1745,74 @@ class SeluDropoutModel(pl.LightningModule):
       }
     }
 ```
+
+The model architecture above consists of at least one hidden layer, and it is possible to add more hidden layers depending on the `n_hidden_layers` parameter, which we'll tune.
+
+-   In theory, **one hidden layer** enables us to solve non-linear separation problems, and **two hidden layers** enable us to solve problems with multiple disconnected decision boundaries. More complex problems may require more layers, but in general, we want to use the simplest architecture that solves our problem (here's a good [article](https://www.baeldung.com/cs/neural-networks-hidden-layers-criteria) that talks about this in more detail).
+
+-   The first hidden layer will take in our features as inputs, so the `input size` hyperparameter has to equal the number of features. We'll give this as a hyperparameter to the model, but we won't tune it.
+
+-   The **output size** of the first hidden layer will equal the input & output sizes of any subsequent hidden layer(s). We will tune this as the `hidden_size` hyperparameter.
+
+    -   It's also possible to set a different hyperparameter for the output size of each subsequent hidden layer and tune them separately, so the layers constantly get smaller as we move forward in the network.
+
+    -   The output size of a hidden layer also equals the number of neurons / units in that layer, as 1 neuron = 1 output. Generally, we want hidden layer sizes to be between the network input size (number of features) and the final output size (one in this case).
+
+-   The output layer will only have one output, the predicted logit for the positive class. We won't apply a sigmoid activation at the end of the network, as our loss function applies sigmoid activation before calculating the loss.
+
+-   Each hidden layer will be followed by a **SELU** activation function layer. This stands for "scaled exponential linear unit". The SELU activation will enable us to model non-linear relationships, while also enforcing a self-normalizing property on the layer outputs (see [original paper](https://arxiv.org/abs/1706.02515)).
+
+    -   Neural networks can be prone to numerical instability issues, so it's a common approach to apply forms of scaling / normalization **inside the network**, to the outputs of layers, before passing them on to the next layer (the scaling / normalization we apply to our features in preprocessing can also be applied as the first layer of a network).
+
+    -   The most common method for in-network normalization is adding **batch normalization layers**, but apparently it can conflict with the application of **dropout layers**.
+
+-   The SELU activation after each hidden layer will be followed by a **dropout layer**.
+
+    -   This is a form of regularization which randomly drops out a fraction of the next layer's inputs at each training step. Lightning automatically disables dropout when predicting with a trained NN model.
+
+    -   When neural networks overfit, they tend to learn noise as a very specific combination of weights across layers. Dropout breaks these combinations, forcing the network to generalize better.
+
+    -   We will use **alpha dropout,** which is applied after SELU activation, and maintains the self-normalizing property of SELU outputs.
+
+    -   The probability of dropping each layer input is another hyperparameter we will tune, as `dropout`. Obviously, a higher probability will result in more severe regularization and possible underfitting.
+
+Our training loss function is going to be **focal loss,** which was developed for highly imbalanced classification problems in image recognition (see [original paper](https://arxiv.org/abs/1708.02002)). This loss function discounts the errors made for "easily classified" training examples, focusing the model's attention on difficult training examples.
+
+-   This loss function has two parameters, `alpha` and `gamma`, which we will tune as hyperparameters.
+
+-   A higher `alpha` value assigns more weight to positive class observations when calculating the loss, similar to our class weighting for previous models' loss functions.
+
+-   The `gamma` value controls how much "easy" training examples are discounted when calculating the loss. If `gamma = 0`, no discounting is applied, and the loss function becomes equivalent to **cross entropy**, which is a commonly used default loss function for NN classification.
+
+    -   Cross entropy is practically equivalent to log loss, which we used previously.
+
+Previously, we used the same loss function both to train our models, and to score their performance on validation data.
+
+-   In general, we want to train & tune models with a loss function that scores probability predictions (more on this in model testing).
+
+-   However, when we tune the parameters of focal loss, our loss function becomes part of the optimization problem (just like the class weights we applied to the loss function for the previous models). If we use focal loss also as our validation metric, this will be a form of leakage: We'll simply get the focal loss parameters that minimize focal loss by changing the metric itself (moving the goalposts in a sense), not necessarily those that maximize model performance.
+
+-   Therefore, for validating our NN hyperparameters' performance, we will use the **average precision** performance metric (which will be explained in model testing). Keep in mind this value is to be **maximized**, and not minimized like a loss function.
+
+Finally, we choose an **optimizer** and an optional **learning rate scheduler.**
+
+The optimizer manages how the model weights are updated after each training step.
+
+-   Recall that NN models are usually trained with a form of minibatch gradient descent: In one training step, a batch of training observations are fed to the model, loss is computed for the predictions and the model weights are updated, taking the learning rate into account.
+
+-   Minibatch SGD is available as an optimizer, but the commonly used default is the **Adam** algorithm. It is a robust general purpose optimizer that accelerates convergence and adjusts the learning rate dynamically. This is what we will use.
+
+-   Adam can also apply L2 regularization to the model weights. We'll tune this as our `l2` hyperparameter.
+
+The learning rate scheduler will dynamically adjust the learning rate, to ensure we get the best tradeoff between fast & optimal convergence, and the risk of overfitting & erratic training steps.
+
+-   A simple approach is starting training with a relatively higher LR, and gradually lowering it after a certain number of training steps / epochs are elapsed with no improvement.
+
+-   We'll try a more sophisticated approach: A **cyclic LR scheduler** will cycle the LR from a `base_lr` value to a `max_lr` value, then back down to the `base_lr`, in a certain number of training steps. After each cycle, the `max_lr` will be reduced in an exponential fashion. We'll tune only the `base_lr` as our hyperparameter `learning_rate`, but it's possible to tune other parameters of the cyclic scheduler.
+
+-   The rationale behind this approach is that a higher LR rate may appear to harm the training process initially, but yield better results later on. By cycling the LR in this fashion, we still decrease the "average" LR over time, while avoiding getting stuck in locally optimal solutions by occasionally using higher LR values (more on this in the [original paper](https://arxiv.org/abs/1506.01186?ref=jeremyjordan.me), and a good [summary article](https://www.jeremyjordan.me/nn-learning-rate/)).
+
+The last Lightning class we need to create is simply an exact copy of the existing Optuna pruner callback, due to compatibility issues (similar issues were discussed [here](https://stackoverflow.com/questions/69526806/pytorch-model-heplers-py-in-is-overridden-raise-valueerror-expected-a-paren) and [here](https://github.com/ray-project/ray/issues/33426)).
 
 ```{python ClassPruner}
 #| code-fold: true
