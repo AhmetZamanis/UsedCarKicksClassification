@@ -50,9 +50,30 @@ Ahmet Zamanis
 
 ## Introduction
 
-Classification, imbalanced data, loss functions. Deep learning & SGD
+In this report, we’ll build and test binary classification algorithms,
+on a dataset of used cars up for sale. Our goal is to predict if a car
+is a “kick”: A car that is heavily damaged or unusable, and should not
+be purchased. The dataset was sourced from
+[OpenML](https://www.openml.org/search?type=data&sort=runs&id=41162&status=active),
+and was apparently used for a past [Kaggle
+competition](https://www.kaggle.com/competitions/DontGetKicked/overview),
+and possibly for a [Chalearn](http://www.chalearn.org/) competition.
 
-Dataset information and source
+We will test logistic regression, support vector machine and XGBoost
+classifiers with the scikit-learn package. As the dataset is quite
+large, we’ll train our logistic regression & SVM models with Stochastic
+Gradient Descent. We’ll also build a deep neural network model with
+PyTorch Lightning. We’ll perform hyperparameter tuning for all models
+with the Optuna framework. We’ll compare the performances of all models,
+both with classification performance metrics, and with a sensitivity
+analysis based on a hypothetical business scenario.
+
+Our target variable is highly imbalanced, as positive observations are
+strongly in the minority. Training classifiers and evaluating their
+performance can be tricky in such cases. To try and address the
+imbalance, we’ll train our scikit-learn models with class weights, use
+focal loss as our loss function for the neural network, and use suitable
+metrics & plots to correctly assess performance.
 
 ## Setup
 
@@ -132,6 +153,10 @@ warnings.filterwarnings("ignore", ".*does not have many workers.*")
 </details>
 
 ## Data cleaning
+
+We load our dataset, which is in .arff format, and carry out some data
+cleaning operations. Most of the operations are explained in the code
+comments, so I’ll keep the text to a minimum in this section.
 
 ``` python
 # Load raw data
@@ -263,6 +288,10 @@ print(df)
 
     [72983 rows x 33 columns]
 
+The categorical variables in the dataset have the bytes datatype, and
+need to be converted to strings. Also, some missing values are recorded
+as “?”, which will be replaced with proper missing values.
+
 ``` python
 # Convert object columns from bytes to string datatype
 object_cols = df.select_dtypes(["object"]).columns
@@ -277,6 +306,10 @@ for column in object_cols:
   df.loc[df[column] == "?", column] = np.nan
 del column
 ```
+
+We have missing values in several columns. Two columns, PRIMEUNIT and
+AUCGUART are missing to a high degree. We’ll inspect and handle each
+column one by one.
 
 ``` python
 # Print n. of missing values in each column
@@ -318,6 +351,8 @@ pd.isnull(df).sum()
     WarrantyCost                             0
     dtype: int64
 
+The target variable is highly imbalanced.
+
 ``` python
 print("Target class (im)balance: ")
 df["IsBadBuy"].value_counts(normalize = True)
@@ -349,13 +384,17 @@ df["Auction"].value_counts(normalize = True)
 
 ``` python
 # Vehicle years range from 2001 to 2010
-print(df[["VehYear", "VehicleAge"]].describe())
+print(
+  df[["VehYear", "VehicleAge"]].describe()
+  )
 
 # Purchase age almost always matches PurchYear - VehYear.
 purch_year = df["PurchDate"].dt.year
 veh_year = df["VehYear"]
 
-print("\nCases where purchase year - vehicle year = vehicle age: " + str(((purch_year - veh_year) == df["VehicleAge"]).sum()))
+print("\nCases where purchase year - vehicle year = vehicle age: " + 
+      str(((purch_year - veh_year) == df["VehicleAge"]).sum())
+      )
 ```
 
              VehYear  VehicleAge
@@ -370,9 +409,21 @@ print("\nCases where purchase year - vehicle year = vehicle age: " + str(((purch
 
     Cases where purchase year - vehicle year = vehicle age: 72976
 
+The “Make” column records the car’s brand, and has many categorical
+levels (high cardinality), though there are columns with many more.
+
+- Some of these brands are sub-brands of others. For example, Scion is a
+  sub-brand of Toyota, and Infiniti is a sub-brand of Nissan.
+
+- We could recode these to reduce cardinality, but most of these
+  sub-brands offer cars of higher segments compared to the main brands
+  (mainly in the US), so keeping them separate could be more useful.
+
 ``` python
 # There are brands with very few observations.
-print(df["Make"].value_counts())
+print(
+  df["Make"].value_counts()
+  )
 
 # Recode TOYOTA SCION into SCION
 df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
@@ -414,6 +465,11 @@ df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
     HUMMER              1
     Name: count, dtype: int64
 
+The “Model” column records the car model. There are more than 1000+
+models, so if we want to use this column as a feature, we’ll likely use
+target encoding. More on this in the feature engineering & preprocessing
+sections.
+
 ``` python
 # There are 1063 unique models, many with only 1 observation.
 df["Model"].value_counts() 
@@ -433,6 +489,10 @@ df["Model"].value_counts()
     PATRIOT 2WD 4C 2.0L        1
     Name: count, Length: 1063, dtype: int64
 
+Trim refers to slightly different versions / packages of a car model.
+These values are meaningless, and possibly misleading, without the
+associated model value.
+
 ``` python
 # 134 trims, many with only 1 observation. 2360 missing values.
 df["Trim"].value_counts() 
@@ -451,6 +511,10 @@ df["Trim"].value_counts()
     JLS        1
     L 3        1
     Name: count, Length: 134, dtype: int64
+
+We also have submodels, which are also likely meaningless or misleading
+without the main model value. This column offers information such as the
+car’s drivetrain, engine type or chassis type.
 
 ``` python
 # 863 submodels, many with only 1 observation. 8 missing values.
@@ -491,20 +555,20 @@ df["SubModel"].value_counts()
 
 ``` python
 # 3000+ unique cars in dataset (some could be different namings / spellings of the same car)
-(df["Model"] + df["Trim"] + df["SubModel"]).value_counts()
+(df["Model"] + " " + df["Trim"] + " " + df["SubModel"]).value_counts()
 ```
 
-    PT CRUISERBas4D SEDAN                          1355
-    IMPALALS4D SEDAN LS                            1300
-    CALIBERSE4D WAGON                               939
-    STRATUS V6 2.7L V6 MSXT4D SEDAN SXT FFV         770
-    TAURUSSE4D SEDAN SE                             761
-                                                   ... 
-    CIVICVP2D COUPE DX VALUE PACKAGE AUTO             1
-    2500 RAM PICKUP 2WDLarQUAD CAB 5.7L LARAMIE       1
-    DURANGO 4WD V8Lim4D SUV 4.7L FFV LIMITED          1
-    LEGACYL4D WAGON L                                 1
-    PATRIOT 2WD 4C 2.0LSpo4D SUV SPORT                1
+    PT CRUISER Bas 4D SEDAN                          1355
+    IMPALA LS 4D SEDAN LS                            1300
+    CALIBER SE 4D WAGON                               939
+    STRATUS V6 2.7L V6 M SXT 4D SEDAN SXT FFV         770
+    TAURUS SE 4D SEDAN SE                             761
+                                                     ... 
+    CIVIC VP 2D COUPE DX VALUE PACKAGE AUTO             1
+    2500 RAM PICKUP 2WD Lar QUAD CAB 5.7L LARAMIE       1
+    DURANGO 4WD V8 Lim 4D SUV 4.7L FFV LIMITED          1
+    LEGACY L 4D WAGON L                                 1
+    PATRIOT 2WD 4C 2.0L Spo 4D SUV SPORT                1
     Name: count, Length: 3136, dtype: int64
 
 ``` python
@@ -532,8 +596,11 @@ df.loc[pd.isna(df["Color"]), "Color"] = "NOT AVAIL"
     NOT AVAIL       94
     Name: count, dtype: int64
 
+Some of the missing values in our data can be manually worked out from
+the car model, or other information. Transmission is one such column.
+
 ``` python
-# 9 missing values from transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
+# 9 missing values for transmission. Try to work them out from car model. 1 occurence of manual spelled differently.
 print(df["Transmission"].value_counts())
 
 # Replace "Manual" with MANUAL in transmission
@@ -545,6 +612,11 @@ df.loc[df["Transmission"] == "Manual", "Transmission"] = "MANUAL"
     MANUAL     2575
     Manual        1
     Name: count, dtype: int64
+
+We’ll print the model information for cars with missing Transmission
+values. We can then fill these in with manual search (or personal
+interest & knowledge in my case). We’ll apply this method to several
+other columns with missing values.
 
 ``` python
 # Work out & impute transmission NAs from car model
@@ -567,6 +639,10 @@ df.loc[pd.isna(df["Transmission"]), "Transmission"] = transmission_nas
     70445 2002.0000  CHEVROLET   CAVALIER 4C 2.2L I4  Bas              NaN
     70446 2002.0000    MERCURY  MOUNTAINEER 2WD V8 4  NaN              NaN
     70450 2006.0000       FORD  FREESTAR FWD V6 3.9L   SE              NaN
+
+There are two columns that record essentially the same information:
+WheelType and WheelTypeID. We’ll keep only one, and recode the missing
+values simply as “Other”.
 
 ``` python
 # 3169 missing values in WheelTypeID, 3174 in WheelType. Crosscheck these columns.
@@ -591,17 +667,17 @@ print(df["WheelType"].value_counts())
 
 ``` python
 print("N. of WheelTypeID NAs that are also WheelType NAs: " + 
-str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
-)
+      str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
+      )
 
-print("Remaining 5 rows with WheelType NAs are WheelTypeID = 0: ")
-df.loc[df["WheelTypeID"] == "0", "WheelType"]
+print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: " +
+      str(df.loc[df["WheelTypeID"] == "0", "WheelType"])
+      )
 ```
 
     N. of WheelTypeID NAs that are also WheelType NAs: 3169
-    Remaining 5 rows with WheelType NAs are WheelTypeID = 0: 
 
-    2992     NaN
+    Remaining 5 rows with WheelType NAs are WheelTypeID = 0: 2992     NaN
     3926     NaN
     42640    NaN
     47731    NaN
@@ -609,17 +685,17 @@ df.loc[df["WheelTypeID"] == "0", "WheelType"]
     Name: WheelType, dtype: object
 
 ``` python
-print("Cases where WheelTypeID 1 = WheelType Alloy: " + str(
-  (df.loc[df["WheelTypeID"] == "1", "WheelType"] == "Alloy").sum()
-))
+print("Cases where WheelTypeID 1 = WheelType Alloy: " + 
+      str((df.loc[df["WheelTypeID"] == "1", "WheelType"] == "Alloy").sum())
+      )
 
-print("Cases where WheelTypeID 2 = WheelType Covers: " + str(
-  (df.loc[df["WheelTypeID"] == "2", "WheelType"] == "Covers").sum()
-))
+print("Cases where WheelTypeID 2 = WheelType Covers: " + 
+      str((df.loc[df["WheelTypeID"] == "2", "WheelType"] == "Covers").sum())
+      )
 
-print("Cases where WheelTypeID 3 = WheelType Special: " + str(
-  (df.loc[df["WheelTypeID"] == "3", "WheelType"] == "Special").sum()
-))
+print("Cases where WheelTypeID 3 = WheelType Special: " + 
+      str((df.loc[df["WheelTypeID"] == "3", "WheelType"] == "Special").sum())
+      )
 ```
 
     Cases where WheelTypeID 1 = WheelType Alloy: 36050
@@ -686,10 +762,12 @@ print("Rows with Size values missing: ")
 print(df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]])
 
 print("\nSize values of other rows with same model: ")
-print(df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
-df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
-df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0] + "\n" +
-df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0])
+print(
+  df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
+  df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
+  df.loc[df["Model"].str.contains("ELANTRA"), "Size"].iloc[0] + "\n" +
+  df.loc[df["Model"].str.contains("PATRIOT 2WD"), "Size"].iloc[0]
+      )
 
 size_nas = ["LARGE TRUCK", "MEDIUM SUV", "MEDIUM", "SMALL SUV", "SMALL SUV"]
 df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
@@ -704,10 +782,15 @@ df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
     69958 2008.0000     JEEP       PATRIOT 2WD 4C
 
     Size values of other rows with same model: 
+
     LARGE TRUCK
     MEDIUM SUV
     MEDIUM
     SMALL SUV
+
+We have a column recording whether a car’s make is GM, Chrysler, Ford,
+or another brand. I doubt we need this, as this information is already
+built into the Make column.
 
 ``` python
 # Unnecessary column, information already incorporated in Make. Drop it
@@ -722,12 +805,29 @@ df = df.drop("TopThreeAmericanName", axis = 1)
     OTHER       11950
     Name: count, dtype: int64
 
+There are several columns that record the MMR values of the cars. MMR
+stands for Manheim Market Report, a valuation offered by car auction
+company Manheim.
+
+- The MMR columns titled “Acquisition” record the MMR valuations of the
+  car at time of purchase. There are several different valuations
+  available, such as auction & retail prices, each for average & clean
+  condition cars respectively.
+
+- The MMR columns titled “Current” are the car’s current MMR valuation
+  prices. For sake of realism, we’ll assume we’re performing this
+  analysis before purchasing the cars, so we’ll drop the Current MMR
+  columns.
+
 ``` python
 print("Missing values in MMR columns:")
-print(pd.isnull(df[['MMRAcquisitionAuctionAveragePrice', 'MMRAcquisitionAuctionCleanPrice',
+print(pd.isnull(
+      df[['MMRAcquisitionAuctionAveragePrice',   'MMRAcquisitionAuctionCleanPrice',
        'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice',
        'MMRCurrentAuctionAveragePrice', 'MMRCurrentAuctionCleanPrice',
-       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]).sum())
+       'MMRCurrentRetailAveragePrice', 'MMRCurrentRetailCleanPrice']]
+        ).sum()
+      )
        
 # Drop current MMR prices to make the exercise more realistic
 df = df.drop([
@@ -749,22 +849,32 @@ df = df.drop([
 ``` python
 # Some MMR values are zero
 print("N. of rows with at least one MMR value of 0: " + 
-      str(len(df.loc[
+      str(
+        len(
+        df.loc[
         (df["MMRAcquisitionAuctionAveragePrice"] == 0) |
         (df["MMRAcquisitionAuctionCleanPrice"] == 0) |
         (df["MMRAcquisitionRetailAveragePrice"] == 0) |
         (df["MMRAcquisitonRetailCleanPrice"] == 0)
-        ]))) 
+        ]
+          )
+        )
+      ) 
 
 
 # Some MMR values are one
 print("N. of rows with at least one MMR value of 1: " + 
-      str(len(df.loc[
+      str(
+        len(
+        df.loc[
         (df["MMRAcquisitionAuctionAveragePrice"] == 1) |
         (df["MMRAcquisitionAuctionCleanPrice"] == 1) |
         (df["MMRAcquisitionRetailAveragePrice"] == 1) |
         (df["MMRAcquisitonRetailCleanPrice"] == 1)
-       ]))) 
+       ]
+          )
+        )
+      ) 
 
   
 # Drop rows with NAs in MMR
@@ -773,7 +883,8 @@ df = df.dropna(subset = [
   'MMRAcquisitionRetailAveragePrice', 'MMRAcquisitonRetailCleanPrice'])
 
 # Drop rows with 0s in MMR
-df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
+df = df.loc[
+  (df["MMRAcquisitionAuctionAveragePrice"] > 0) &
   (df["MMRAcquisitionAuctionCleanPrice"] > 0) &
   (df["MMRAcquisitionRetailAveragePrice"] > 0) &
   (df["MMRAcquisitonRetailCleanPrice"] > 0)].copy()
@@ -782,9 +893,25 @@ df = df.loc[(df["MMRAcquisitionAuctionAveragePrice"] > 0) &
     N. of rows with at least one MMR value of 0: 828
     N. of rows with at least one MMR value of 1: 131
 
+The PRIMEUNIT and AUCGUART columns mostly consist of missing values. But
+for rows with known values, they could be important predictors.
+
+- PRIMEUNIT records whether a car attracted unusually high demand. “YES”
+  values are very rare even among non-missing rows. The missing values
+  could simply mean “NO”.
+
+- AUCGUART records the level of inspection passed by a car before being
+  auctioned. “GREEN” means fully inspected, “YELLOW” means partially
+  inspected, “RED” means “you buy what you see”. There are no “YELLOW”
+  values in the data, which means the missing values could simply mean
+  “YELLOW”.
+
+- For both columns, we’ll recode missing values as “UNKNOWN”. Later
+  we’ll have options to handle these based on the categorical encoding
+  method we use.
+
 ``` python
-# 95% missing column. Missing values possibly mean NO. YES means there was unusual
-# demand for the car.
+# 95% missing column
 print(df["PRIMEUNIT"].value_counts(normalize = True))
 
 # Fill NAs in PRIMEUNIT with UNKNOWN.
@@ -797,8 +924,7 @@ df.loc[pd.isnull(df["PRIMEUNIT"]), "PRIMEUNIT"] = "UNKNOWN"
     Name: proportion, dtype: float64
 
 ``` python
-# 95% missing column. AUCGUART is the vehicle inspection level at auction. Green
-# means inspected, yellow means partial information available, red means you buy what you see. Could assume yellow for missing values.
+# 95% missing column
 print(df["AUCGUART"].value_counts(normalize = True))
 
 # Fill NAs in AUCGUART with UNKNOWN.
@@ -893,11 +1019,30 @@ df["VNST"].value_counts()
     NY        6
     Name: count, dtype: int64
 
+Vehicle purchase price is likely an important predictor, which is why
+we’ll drop the few rows with missing purchase prices. There is one car
+with a purchase price of 1, which may mean it was a symbolic
+transaction. We’ll keep this row for now.
+
 ``` python
 # VehBCost is purchase price. 68 missing values, drop these rows. One car has a purchase price of 1.
-df["VehBCost"].describe()
+print(df["VehBCost"].describe())
 df = df.dropna(subset = "VehBCost")
 ```
+
+    count   72069.0000
+    mean     6727.6698
+    std      1766.7283
+    min         1.0000
+    25%      5430.0000
+    50%      6700.0000
+    75%      7900.0000
+    max     45469.0000
+    Name: VehBCost, dtype: float64
+
+Warranty cost is paid for 36 months worth of warranty, or until the car
+racks up 36k miles. Likely another important predictor, especially
+relative to the purchase price.
 
 ``` python
 # Warranty cost is for 36 months, or until 36k miles
@@ -916,6 +1061,10 @@ df["WarrantyCost"].describe()
 
 ## Feature engineering
 
+We can create some new features from our existing ones. We can also
+explicitly map some interaction terms, to make them easier to discover
+for some models.
+
 ``` python
 # Time features from date: Purchase year, month, day of week
 df["PurchaseYear"] = df["PurchDate"].dt.year
@@ -923,6 +1072,13 @@ df["PurchaseMonth"] = df["PurchDate"].dt.month
 df["PurchaseDay"] = df["PurchDate"].dt.weekday
 df = df.drop("PurchDate", axis = 1)
 ```
+
+The model and submodel names incorporate plenty of technical information
+on the cars. We’ll create numerous binary columns that flag various
+traits of a car: Engine type, drivetrain type, chassis type and number
+of doors. I also thought about retrieving engine displacement in liters
+as a numeric feature, but this information is not openly stated for many
+cars, and would raise many missing values.
 
 ``` python
 # Engine type features from Model: V6, V8, I4/I-4, 4C, 6C
@@ -990,6 +1146,12 @@ df.loc[pd.isnull(df["FourDoors"]), "FourDoors"] = [
 df["FourDoors"] = df["FourDoors"].astype(int)
 ```
 
+I decided to combine the Model & SubModel columns to have one “car”
+feature. This column will have very high cardinality, but we’ll use
+target encoding, and models with this feature performed slightly better
+than models without it. I did not include Trim in this feature, but it’s
+possible to give it a try.
+
 ``` python
 # Recode SubModel NAs into empty string
 df.loc[pd.isnull(df["SubModel"]), "SubModel"] = ""
@@ -1000,6 +1162,10 @@ df["ModelSubModel"] = df["Model"] + " " + df["SubModel"]
 # Drop trim, submodel
 df = df.drop(["Trim", "SubModel"], axis = 1)
 ```
+
+Some obvious interaction features we can add are miles traveled per
+year, the premium / discount paid on the MMR prices, and the warranty
+cost to purchase price ratio.
 
 ``` python
 # Miles per year feature
@@ -1018,6 +1184,10 @@ df["PremiumRetailAvg"] = (df["VehBCost"] - df["MMRAcquisitionRetailAveragePrice"
 df["PremiumRetailClean"] = (df["VehBCost"] - df["MMRAcquisitonRetailCleanPrice"]) / df["MMRAcquisitonRetailCleanPrice"]
 ```
 
+The row with a purchase price of 1 results in an astronomically high
+value for the warranty cost / purchase price ratio, so we drop it after
+all. We have plenty of data, and it’s likely better to keep it accurate.
+
 ``` python
 # Warranty ratio to purchase price
 df["WarrantyRatio"] = df["WarrantyCost"] / df["VehBCost"]
@@ -1030,6 +1200,27 @@ df = df.loc[df["VehBCost"] != 1].copy()
     VehBCost           1.0000
     WarrantyRatio   1590.0000
     Name: 20442, dtype: float64
+
+Most machine learning algorithms require all features to be numeric.
+We’ll use one-hot encoding for most of our categorical columns.
+
+- This can be done before splitting training & testing data, as it won’t
+  leak information from the testing set. However, we can’t use this
+  approach in future prediction sets if they have new categorical levels
+  unseen in our training data.
+
+- Adding too many columns may cause our models to suffer from the curse
+  of dimensionality, which affects different algorithms to different
+  extents. We’ll one-hot encode only the columns with relatively fewer
+  levels, and leave the high-cardinality columns to target encoding.
+
+- A categorical column with N levels can be encoded with N-1 binary
+  columns, as the Nth value will be reflected by all columns taking the
+  value of 0. We’ll take advantage of this to keep our column count low.
+
+- We’ll also create binary columns only for known values of PRIMEUNIT
+  and AUCGUART, effectively encoding the missing values as 0 for all
+  binary columns.
 
 ``` python
 # One hot encode some categoricals in-place
@@ -1049,12 +1240,28 @@ df["AUCGUART_RED"] = (df["AUCGUART"] == "RED").astype(int)
 df = df.drop(["PRIMEUNIT", "AUCGUART"], axis = 1)
 ```
 
+Month and day of week are cyclical features: The “distance” between
+month 1 and month 12 is not eleven, it is one. Simply label encoding the
+months as 1-12 , or weekdays as 1-7 would mislead our models.
+
+- Instead, we’ll use cyclical encoding, which encodes each feature using
+  a sine and cosine pair, conveying their cyclical nature to our
+  algorithms.
+
+- Another option is one-hot encoding, but it creates considerably more
+  columns than cyclical encoding. It could also be advantageous to avoid
+  “splitting” related information into many columns, to ensure they are
+  evaluated together.
+
 ``` python
 # Cyclical encode month and day of week features
 encoder_cyclical = CyclicalFeatures(
   variables = ["PurchaseMonth", "PurchaseDay"], drop_original = True)
 df = encoder_cyclical.fit_transform(df)
 ```
+
+The remaining, high-cardinality categorical features will be target
+encoded, which won’t change the number of columns.
 
 ``` python
 # View final feature set before preprocessing
@@ -1210,6 +1417,18 @@ print(df.head())
 
 ## Preprocessing pipeline
 
+The rest of our preprocessing will take place in a scikit-learn
+pipeline, to ensure we avoid any target leakage, and to keep our
+modeling workflow clean.
+
+- First, we’ll set aside 20% of our data for testing. We’ll ensure the
+  split is performed with stratification: We want to maintain the target
+  class balance as much as possible.
+
+- We’ll use the remaining 80% for hyperparameter tuning and validation.
+  We’ll test the final models with the best hyperparameters on the
+  testing data.
+
 ``` python
 # Split target and features
 y = df["IsBadBuy"].astype(int)
@@ -1221,6 +1440,46 @@ x_train, x_test, y_train, y_test = train_test_split(
   x, y, test_size = 0.2, random_state = 1923, stratify = y
   )
 ```
+
+We will use several target encoders to encode the remaining,
+high-cardinality categorical features.
+
+- Target encoders derive a numeric value based on the target values for
+  each categorical level. This brings the obvious risk of leaking the
+  target values from the testing data if not applied properly.
+
+- Another potential issue is overfitting: If a categorical level has
+  very few observations, the value derived from the target will be
+  unreliable.
+
+  - The target encoder applies a form of regularization to alleviate
+    this: The encoded value for infrequent categorical levels are
+    blended with the values for all observations. The degree of this
+    regularization can be controlled by the parameters `min_sample_leaf`
+    and `smoothing` in
+    [target_encoder](https://contrib.scikit-learn.org/category_encoders/targetencoder.html).
+    We’ll use the default settings.
+
+  - The target encoder can also make use of a hierarchy of columns:
+    Categorical levels of one column may be subsets of levels of another
+    column. We have two such hierarchies in our data: The
+    make-model-submodel hierarchy, and the states-zipcodes hierarchy.
+
+  - We’ll map the target encoders for these columns with their
+    respective higher hierarchies, so regularization can be applied by
+    blending in the higher hierarchy values instead of values for all
+    observations.
+
+- Aside from these risks and considerations, target encoding brings
+  several benefits:
+
+  - It does not create any new columns, and it does not split the
+    information from one feature into several columns.
+
+  - It is also able to handle any missing values, or previously unseen
+    categorical levels in prediction data, by applying the encoded
+    values for all observations, or the values for the hierarchy, as
+    done in regularization.
 
 ``` python
 # Target encoder: ModelSubModel encoded with Model, Make hierarchy
@@ -1248,6 +1507,41 @@ encode_target_zip = TargetEncoder(cols = ["VNZIP1"], hierarchy = hier_states)
 encode_target = TargetEncoder(cols = ["Make", "BYRNO", "VNST"])
 ```
 
+Many machine learning algorithms can be sensitive to the value scales of
+features.
+
+- Those with very large absolute values may dominate training, and
+  prevent smaller-scale values from having much effect.
+
+- All our models except the tree-based XGBoost algorithm can be
+  sensitive to scale. Especially neural networks can suffer from various
+  numerical stability issues in training.
+
+- We’ll scale all features between 0 and 1 as our final preprocessing
+  step.
+
+For hyperparameter validation, we will use 3-fold crossvalidation:
+
+- The 80% training data will be split to 3 equal folds. Each
+  hyperparameter configuration we evaluate will be trained on two folds,
+  and validated on the third, for a total of three different
+  combinations. Stratification will be applied just like in the
+  train-test split.
+
+- We could have more robust validation scores with more folds, but the
+  neural network tuning can be computationally expensive, and I wanted
+  to compare each model on “equal terms”.
+
+- An even more reliable tuning & testing scheme is nested
+  crossvalidation: Splitting the full data into N training-testing folds
+  (outer resampling), and splitting each training fold into K folds for
+  parameter tuning (inner resampling). This is likely not necessary with
+  such a big dataset.
+
+- Since we’ll build a custom model validation function for each model,
+  we’ll retrieve the train-test indices from the 3-fold CV splitter, for
+  a total of three train-test index pairs.
+
 ``` python
 # Scaling method
 scaler_minmax = MinMaxScaler()
@@ -1273,9 +1567,174 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 
 ## Modeling & hyperparameter optimization
 
-Watch out for conflicts in variable names.
+The hyperparameter optimization will follow 3 main steps for every
+model:
+
+- A **validation function** will be defined, to perform 3-fold
+  crossvalidation with a given hyperparameter set.
+
+- An **Optuna objective function** will be defined, which will suggest
+  hyperparameter values from a predefined range, validate the parameter
+  set (with our validation function), and report the average validation
+  score of the parameter set.
+
+  - One iteration of the objective function for one set of
+    hyperparameters is called an **Optuna trial.**
+
+- An **Optuna study** will be created and performed. The study performs
+  a given number of trials and records their results.
+
+  - The study uses a **sampler** algorithm to intelligently suggest
+    parameter values for trials, and a **pruner** algorithm to stop
+    unpromising trials early on and save time.
+
+Since the process is very similar for all models, we’ll go over the full
+process only for the first model, logistic regression. For the other
+models, only the differences will be explained. Of course, the actual
+tuning process takes hours, so I’ll just display the code I used without
+running it and load previously saved results.
 
 ### Logistic regression with SGD
+
+Logistic regression predicts the log-odds of an event occurring (also
+called logits) with a linear model. It’s a simple, robust method that
+can perform very well compared to more advanced models.
+
+- The main assumption of logistic regression is a linear relationship
+  between the predictors and the logits. The less linear the
+  relationships are, the less accurate logistic regression will be.
+
+- Logistic regression won’t find and model interaction effects unless
+  they are explicitly mapped as new features (we did this for some
+  features).
+
+- Plain linear regression models can suffer from multicollinearity and
+  curse of dimensionality in the feature set, but **regularization** is
+  almost always applied to model coefficients to avoid overfitting.
+
+  - **L1 (lasso)** regularization can potentially shrink model
+    coefficients to zero, effectively dropping predictors from the model
+    and performing feature selection.
+
+  - **L2 (ridge)** regularization can’t shrink coefficients to zero, but
+    just reduces their contribution to the model.
+
+  - **Elastic net** regularization is a blend of L1 and L2
+    regularization, controlled by a ratio parameter. This is what we
+    will use.
+
+Logistic regression (implemented with
+[LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html)
+in scikit-learn) is normally fit on all training observations at once:
+The model coefficients are all estimated in one go using a solver
+algorithm. This calculation can be a bit slow with a large dataset like
+ours, especially since we’ll fit hundreds of models for hyperparameter
+tuning. To save time, we’ll train our logistic regression (and SVM)
+models with **stochastic gradient descent:**
+
+- In SGD, the model is trained only on one observation in **one training
+  step**. The **training error (loss)** is calculated and the model
+  parameters are updated at every training step. When the model sees
+  each training observation once, we complete a **training epoch.**
+
+- We perform multiple epochs of training. Training is usually **early
+  stopped** when the validation score stops improving. This is usually
+  assessed after each epoch.
+
+- This approach is similar to how neural networks are trained. A key
+  difference is NNs use **minibatch** SGD: A training step consists of a
+  batch of observations, which can range from 16-32 to 1024-2048
+  observations (usually a power of 2). This is a faster approach than
+  single-observation SGD. It’s possible to implement this manually in
+  scikit-learn, but it likely won’t bring much improvement for logistic
+  regression or SVM.
+
+We can train linear classification models with SGD in scikit-learn using
+[SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html).
+Below, we will define a validation function that takes a set of
+hyperparameters, builds a logistic regression model with SGDClassifier
+and validates the performance of the parameter set.
+
+- In one instance of the function, a model will be created, trained &
+  validated for each CV fold, for a total of three times.
+
+- The model will be trained with the `.partial_fit()` method, which
+  trains the SGDClassifier for only one epoch. We’ll call the method
+  repeatedly to train the model for several epochs. Our function will
+  handle early stopping manually by recording each epoch’s score. By
+  default, 10 epochs with less than 0.0001 improvement in the validation
+  error will terminate the model training.
+
+  - **Class weights** will be applied to both training and validation
+    error calculations: The errors for the minority class will be
+    penalized more heavily, forcing our models to pay more attention to
+    them.
+
+  - The class weight for each class will be inversely proportional to
+    its class frequency, calculated automatically by a scikit-learn
+    utility (only using the training data to avoid leakage). Using these
+    class weights, we will create a sample weights vector for every
+    training & validation set observation, and pass these to the model
+    training and scoring functions respectively.
+
+- If the function is ran for an Optuna trial, it will return the average
+  CV score of the parameter set (from the best epochs, not the last
+  ones). It will also perform pruning if directed by the Optuna pruner:
+
+  - Unpromising trials (determined according to the validation scores of
+    the first epochs) will be stopped early by the Optuna pruner. To
+    allow pruning, the score of each epoch for the first CV fold will be
+    reported to the Optuna study.
+
+- If not ran for an Optuna trial, the function will return the best
+  number of epochs for the hyperparameter set, in each CV fold. We’ll
+  use this setting to train and validate our model one last time with
+  the best hyperparameter set, and determine the best number of epochs
+  for the final model.
+
+The SGDClassifier is a general method for training a linear model with
+SGD. Its parameters determine what type of linear model is trained:
+
+- The `loss` parameter sets the training loss function. For
+  probabilistic logistic regression, we will use **log loss**, which
+  compares the probability predictions (between 0-1) to the actual
+  target labels (0 or 1). We will also use log loss to score our
+  predictions on the validation set.
+
+- The `penalty` parameter sets the regularization type. We’ll use
+  elastic net regularization.
+
+- `learning_rate` is another key parameter in SGD training (especially
+  for neural networks). It determines the magnitude of the coefficient
+  updates in each training step.
+
+  - With a higher LR, the coefficients will be updated more aggressively
+    in each training step. The models will train faster, may be more
+    likely to find optimal solutions, but also more likely to overfit
+    and suffer from erratic model updates.
+
+  - With a lower LR, the coefficients will be updated more
+    conservatively in each training step. The models will train slower,
+    may be less likely to reach optimal solutions, but will also be more
+    robust against overfitting.
+
+  - In neural networks, a **learning rate scheduler** is often used to
+    dynamically adjust the learning rate. We’ll explore this in more
+    detail for our NN model, but for SGDClassifier, we’ll use a default
+    heuristic based on the regularization strength.
+
+- We have two hyperparameters to tune for the logistic regression model:
+  `alpha` and `l1_ratio`.
+
+  - Alpha is the regularization strength. A higher value means the model
+    coefficients will be penalized more heavily to combat overfitting.
+    Generally, we’d need a higher alpha value with more redundancy in
+    the feature set. In practice, the optimal value is usually a small
+    fraction, and too high regularization leads to the opposite problem
+    of underfitting.
+
+  - L1 ratio will determine what fraction of our elastic net
+    regularization will be L1 regularization.
 
 <details>
 <summary>Show validation function definition</summary>
@@ -1285,7 +1744,7 @@ Watch out for conflicts in variable names.
 def validate_logistic(
   alpha, # Regularization strength hyperparameter
   l1_ratio, # Ratio of L1 regularization hyperparameter
-  tol = 1e-4, # Min. required validation score change to count as improvement
+  tol = 1e-4, # Min. required change in validation score to count as improvement
   verbose = 0, # Set to 1 to print model training progress
   trial = None # Pass the Optuna trial if applicable
   ):
@@ -1320,9 +1779,9 @@ def validate_logistic(
       loss = "log_loss", # Log loss metric for probabilistic logistic regression
       penalty = "elasticnet", # Elastic net regularization: Blend of L1 and L2
       learning_rate = "optimal", # Dynamically adjusted learning rate, based on a heuristic that uses regularization strength 
-      random_state = 1923,
-      verbose = verbose,
-      n_jobs = -1,
+      random_state = 1923, # Set random seed for replicable results
+      verbose = verbose, # Whether to print training progress or not
+      n_jobs = -1, # Use all CPU cores to parallelize
       alpha = alpha, # Hyperparameters to validate
       l1_ratio = l1_ratio # Hyperparameters to validate
     )
@@ -1330,7 +1789,7 @@ def validate_logistic(
     # Perform epoch by epoch training with early stopping & pruning
     epoch_scores = [] # Record val. score of each epoch
     n_iter_no_change = 0 # Record epochs with no improvement
-    tol = tol
+    tol = tol # Min. change in val. score to count as improvement
     
     for epoch in range(1000):
       
@@ -1338,11 +1797,11 @@ def validate_logistic(
       model_logistic.partial_fit(
         x_tr, y_tr, classes = classes, sample_weight = sample_weight)
       
-      # Score epoch
+      # Predict validation set & score predictions
       y_pred = model_logistic.predict_proba(x_val)
       epoch_score = log_loss(y_val, y_pred, sample_weight = sample_weight_val)
       
-      # For first CV fold, report intermediate score of trial to Optuna
+      # For first CV fold, report intermediate score of Optuna trial if applicable 
       if (i == 0) and (trial is not None):
         trial.report(epoch_score, epoch)
       
@@ -1393,13 +1852,37 @@ def validate_logistic(
 
 </details>
 
+Next, we define the Optuna objective function for logistic regression.
+Here, we decide the search space for each hyperparameter we want to
+tune.
+
+- We’ll tune `alpha` between a very small float value of 5e-5 and 0.5,
+  though the optimal value is likely close to 0. Therefore, we will
+  instruct Optuna to sample from the log domain:
+
+  - The logarithm of the search space will be taken, values will be
+    sampled from this space, and the exponent will be taken to return
+    the original value. This will make lower values more likely to be
+    suggested. We’ll also do this for other hyperparameters in other
+    models that usually take an optimal value closer to 0.
+
+- `l1_ratio` is constrained between 0 and 1, so we will use that as our
+  search space. A value of 0 will result in pure L2 regularization, and
+  a value of 1 will result in pure L1 regularization. Anything in
+  between is a blend of the two.
+
 ``` python
 # Define objective function for hyperparameter tuning with Optuna
 def objective_logistic(trial):
   
   # Define hyperparameter ranges to tune over, and suggest a value for 
   # each hyperparameter
-  alpha = trial.suggest_float("reg_strength", 5e-5, 0.5, log = True)
+  alpha = trial.suggest_float(
+    "reg_strength", # Parameter name in trials result table
+    5e-5, # Minimum value to try
+    0.5, # Maximum value to try
+    log = True # Sampling from the log domain makes lower values more likely
+    )
   l1_ratio = trial.suggest_float("l1_ratio", 0, 1)
   
   # Validate the parameter set with predefined function
@@ -1410,15 +1893,58 @@ def objective_logistic(trial):
   return mean_cv_score
 ```
 
+Now we create the Optuna study. This object will manage the tuning
+process and store the information from trials.
+
+- We set a sampler algorithm: The sampler suggests hyperparameter values
+  for trials intelligently, often based on the results of previous
+  trials.
+
+  - In our case, we use the suggested default, the **Tree-structured
+    Parzen Estimator** algorithm (see the
+    [documentation](https://optuna.readthedocs.io/en/stable/reference/samplers/generated/optuna.samplers.TPESampler.html)
+    for a list of papers related to TPE.). In short, the TPE algorithm
+    fits Gaussian Mixture Models to estimate the optimal parameters for
+    each trial.
+
+- We set a pruner algorithm: The pruner decides whether to complete a
+  trial, or prune it based on its intermediate validation scores. This
+  saves us a great deal of time by stopping unpromising trials early.
+
+  - We use the **Hyperband** pruner algorithm, which is suggested for
+    the TPE sampler. In short, hyperband allocates a finite budget
+    equally to each hyperparameter configuration. There is the option to
+    increase the total budget, at the expense of eliminating
+    configurations more quickly (see the
+    [documentation](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.HyperbandPruner.html)
+    and [original
+    paper](https://www.jmlr.org/papers/volume18/16-558/16-558.pdf) for
+    more detail).
+
+- We name our study, and ensure we set the correct objective: Since a
+  lower log loss value is better, we aim to minimize the reported
+  metric.
+
 ``` python
 # Create Optuna study
 study_logistic = optuna.create_study(
-  sampler = optuna.samplers.TPESampler(seed = 1923),
-  pruner = optuna.pruners.HyperbandPruner(),
+  sampler = optuna.samplers.TPESampler(seed = 1923), # Sampling algorithm
+  pruner = optuna.pruners.HyperbandPruner(), # Pruning algorithm
   study_name = "tune_logistic",
-  direction = "minimize"
+  direction = "minimize" # Objective is to minimize the reported metric
 )
 ```
+
+We can finally run the hyperparameter optimization. It is recommended to
+run the TPE algorithm with 100 to 1000 trials. The models in the final
+edition of this report were tuned with 500 or 1000 trials.
+
+- With pruning in place, even if improvement stops after a few trials,
+  the remaining trials will mostly be pruned.
+
+- For logistic regression, one study of 500 trials usually took around
+  10-15 minutes. The SGDClassifier was parallelized with `n_jobs = -1`
+  and 12 CPU cores available.
 
 ``` python
 # Optimize Optuna
@@ -1427,6 +1953,9 @@ study_logistic.optimize(
   n_trials = 500,
   show_progress_bar = True)
 ```
+
+The trials were exported to .csv for future use, and the best set of
+hyperparameters will be imported.
 
 ``` python
 # Retrieve and export trials
@@ -1454,14 +1983,42 @@ best_trial_logistic
     state                                                PRUNED
     Name: 0, dtype: object
 
+We see the best tune has a very low L1 regularization ratio, though not
+zero. The regularization strength is also fairly low, but not nearly
+close to the lower bound of our search space. This suggests we are
+likely close to the optimal solution.
+
+The last step is to retrieve the best number of epochs for the optimal
+parameter set, again using our validation function, this time without an
+Optuna trial. We also decrease the tolerance parameter for the early
+stopping.
+
 ``` python
-# Retrieve best number of epochs for optimal parameters, for each CV fold
+# Validate best number of epochs for optimal parameters, for each CV fold
 best_epochs = validate_logistic(
   alpha = best_trial_logistic["params_reg_strength"],
   l1_ratio = best_trial_logistic["params_l1_ratio"],
   tol = 1e-5
   )
 ```
+
+The median best epoch for the 3 CV folds was 26, which is the number of
+epochs we’ll use in our final logistic regression model, created below.
+
+- We combine our preprocessing pipeline with our logistic regression
+  model, to perform all steps in one go.
+
+- We’ll train our final model with the optimal hyperparameters, for the
+  optimal number of epochs we derived from crossvalidation, with no
+  early stopping.
+
+  - Even with the built-in validation disabled, SGDClassifier performs
+    early stopping based on the training loss.
+
+  - This can be misleading, as lower training loss doesn’t necessarily
+    translate into better predictive performance on unseen data (in the
+    case of overfitting). To avoid this, we set an arbitrarily high
+    number for the `n_iter_no_change` parameter.
 
 ``` python
 # Create pipeline with final logistic regression model
@@ -1483,6 +2040,106 @@ pipe_logistic = Pipeline(steps = [
 ```
 
 ### Support vector machine with SGD
+
+Our second model, SVM, aims to classify observations by separating them
+with decision boundaries drawn in the feature space.
+
+- Normally, the decision boundaries are linear, but non-linear
+  transformations can be applied to the feature space to model
+  non-linear decision boundaries.
+
+  - There are numerous **kernel functions** that can be used to
+    transform a feature space. The best choice will depend on the nature
+    of the relationships in the data, but we will use a general-purpose
+    **radial basis function.**
+
+- SVM can also be susceptible to multicollinearity and curse of
+  dimensionality, so we will apply & tune regularization parameters.
+  Regularization affects the size of the margin around the decision
+  boundary:
+
+  - With higher regularization, we have a larger margin, which may
+    generalize better to new data (reduce overfitting), but may also
+    lead to underfitting by not separating the training observations
+    enough.
+
+  - With lower regularization, we have a smaller margin. We can separate
+    the training observations more accurately, but this could lead to
+    overfitting on unseen data.
+
+- SVM does not natively output probability predictions between 0 and 1.
+  Instead, it calculates a **decision function,** based on the distance
+  of an observation from the decision boundaries. This has implications
+  for our performance evaluations, which we will discuss more in model
+  testing.
+
+In scikit-learn, a linear SVM classifier can normally be applied with
+[LinearSVC](https://scikit-learn.org/stable/modules/generated/sklearn.svm.LinearSVC.html).
+A non-linear SVM with built-in kernel options can be applied with
+[SVC](https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html#sklearn.svm.SVC).
+Both approaches, especially the latter, will be computationally
+expensive with a large dataset. Just like logistic regression, we can
+use SGDClassifier to train our SVM much more quickly with a SGD
+algorithm.
+
+- Before we apply the SGDClassifier, we’ll add a **kernel
+  approximation** step to our pipeline to transform our feature space
+  into non-linear.
+  [RBFSampler](https://scikit-learn.org/stable/modules/generated/sklearn.kernel_approximation.RBFSampler.html#sklearn.kernel_approximation.RBFSampler)
+  uses random Fourier features to quickly approximate an RBF feature
+  space ([original
+  paper](https://people.eecs.berkeley.edu/~brecht/papers/08.rah.rec.nips.pdf)).
+
+  - This may or may not be a good kernel choice for our data. The only
+    way to be sure is to try different options. Here, we are using a
+    general purpose non-linear kernel to compare a non-linear SVM with
+    other models. Generally, it is suggested to use the “most linear
+    decision boundaries that solve our problem”, as they tend to be more
+    robust and efficient.
+
+  - RBFSampler has two parameters, `gamma` and `n_components`.
+
+    - `gamma` is a RBF function parameter that affects the reach of each
+      training observation, and therefore the “smoothness” of the
+      decision boundary. We leave this value to a default heuristic
+      dependent on the number of features and their variance.
+
+    - A higher `gamma` means the decision boundary is affected mostly by
+      the closest points, making it less linear and less smooth. This
+      can separate the training observations better, but may also cause
+      overfitting on unseen data.
+
+    - A lower `gamma` does the opposite: A decision boundary affected by
+      observations further away, more linear and smoother. This may
+      generalize better to new data, but may also cause underfitting.
+
+    - `n_components` refers to the number of Monte Carlo samples per
+      each feature used to approximate the RBF feature space. A higher
+      value may increase the quality of the approximation, but we leave
+      this default too.
+
+- After the kernel approximation gives us a non-linear feature space,
+  the SGDClassifier will act as a linear SVM if we change our loss
+  metric to **hinge loss.**
+
+  - Hinge loss is the default loss metric used to train SVM models. It
+    is calculated from the output of the decision function. It slightly
+    penalizes even “correct” predictions if they were too close to the
+    decision boundary, i.e. close to being misclassified. This property
+    aims to maximize the distances between the observations and the
+    decision boundary.
+
+  - We’ll apply class weights to hinge loss, just like we did with log
+    loss. We’ll also use class weighted hinge loss to score predictions
+    on the validation data.
+
+  - SVM is normally fit with L2 regularization only, but we’ll try
+    elastic net regularization just like with logistic regression.
+
+The validation function and the Optuna tuning process is pretty much the
+same with logistic regression. The code is available below. The Optuna
+study with 500 trials took roughly 15 minutes with 12 CPU cores
+available.
 
 <details>
 <summary>Show validation function definition</summary>
@@ -1645,18 +2302,41 @@ best_trial_svm
     state                                                PRUNED
     Name: 0, dtype: object
 
+The optimal hyperparameter set has lower regularization strength
+compared to logistic regression, but a higher ratio of L1
+regularization. This could suggest the RBF transformation made our
+feature set more redundant, but the parameter values are likely not
+directly comparable across different algorithms.
+
+We create the final SVM model, combining it with the preprocessing &
+kernel approximation pipeline.
+
+- We also wrap our SVM model in a
+  [CalibratedClassiferCV](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html)
+  object. This will approximate probability values between 0 and 1 from
+  the SVM decision function, so we can retrieve probability predictions,
+  calculate some performance metrics that depend on them, and compare
+  SVM with other models.
+- Keep in mind the probabilities acquired in this manner may be
+  unreliable. The
+  [documentation](https://scikit-learn.org/stable/modules/calibration.html#calibration)
+  states the default sigmoid method may be unsuitable for imbalanced
+  problems, so we use the non-parametric, isotonic version.
+
 ``` python
 # Create pipeline with final SVM model
 pipe_svm = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
-  ("KernelTrick", RBFSampler( # Non-linear transformation of features
-      gamma = "scale",
-      n_components = 100,
+  ("KernelTrick", RBFSampler( # Non-linear transformation of features with 
+                              # RBF kernel
+      gamma = "scale", # RBF kernel parameter, left to a default heuristic
+      n_components = 100, # N. of Monte Carlo samples used to approximate 
+                          # each feature
       random_state = 1923
     )
   ),
   ("SVM", CalibratedClassifierCV( # Prob. calibrator to estimate predicted probs.
-    SGDClassifier( # Model step
+    estimator = SGDClassifier( # Model step
       loss = "hinge", # Hinge loss to train a linear SVM
       penalty = "elasticnet", # Elastic net regularization instead of default L2
       alpha = best_trial_svm["params_reg_strength"],
@@ -1665,7 +2345,8 @@ pipe_svm = Pipeline(steps = [
       n_iter_no_change = 1000, # Arbitrary high value to ensure training doesn't early stop based on training loss
       verbose = 1, # Print training progress
       random_state = 1923
-        )
+        ),
+    method = "isotonic" # Non-parametric method to estimate predicted probs.
       )
     )
   ]
@@ -1673,6 +2354,77 @@ pipe_svm = Pipeline(steps = [
 ```
 
 ### XGBoost
+
+Next is our XGBoost model, a **gradient boosting** algorithm. Gradient
+boosting builds a number of models sequentially, each one trained on the
+prediction errors (residuals) of the previous one. The final ensemble
+model is a combination of all models.
+
+- One iteration of gradient boosting (equivalent to building one model)
+  is called a **round.** By default, XGBoost builds a **decision tree**
+  model in each round.
+
+- Tree-based models learn relationships & make predictions by splitting
+  the data according to the predictor values.
+
+  - This means they can natively model non-linear relationships, and
+    find interaction effects even if they are not explicitly mapped as
+    features (though doing so may still improve performance).
+
+  - However, they can’t extrapolate relationships between predictors and
+    the target outside of the observed training data.
+
+    - For example, for a feature X and target Y, a relationship of Y =
+      2X will be easily modeled and extrapolated by a linear model, even
+      if X takes a very large value not seen in training. A tree-based
+      model, however, will continue predicting according to the highest
+      X value seen in training.
+
+- No hard assumptions are made about the data, though too many features
+  can make it harder to identify the optimal splits and potentially
+  hamper prediction performance.
+
+  - Normally, a single decision tree with too few predictors & splits
+    will tend to underfit, and one with too many predictors & splits
+    will tend to overfit. In XGBoost, we control the complexity of each
+    tree with several hyperparameters. Generally, we build numerous
+    shallow trees (called **weak learners**) and ensemble them to arrive
+    at a robust final prediction.
+
+  - XGBoost can apply several types of regularization & sampling to
+    further control the tradeoff between overfitting and underfitting.
+    Tuning the numerous hyperparameters is crucial for good performance.
+
+  - While model performance may not be impacted by multicollinearity in
+    the feature set, the **feature importance scores** that can be
+    extracted from tree-based models can be misleading. These only look
+    at the relevancy between the target and the features, without taking
+    their redundancy with one another into account (for more on this,
+    see [this
+    article](https://towardsdatascience.com/mrmr-explained-exactly-how-you-wished-someone-explained-to-you-9cf4ed27458b).).
+
+While there are many more hyperparameters to tune for XGBoost, the code
+is simpler.
+
+- We can simply pass a validation set while training an XGBoost model,
+  which automatically handles early stopping, records the best
+  validation score and the best round.
+
+- **Callbacks** are objects that monitor model training and perform a
+  certain action based on a condition, most commonly early stopping.
+  Optuna includes a special pruning callback integration for XGBoost, so
+  we don’t have to manually report scores to the Optuna study.
+
+- XGBoost supports GPU training, which will save us some training time.
+  With 1000 trials, the Optuna study took roughly 25-30 minutes on my
+  GPU.
+
+- The `scale_pos_weight` hyperparameter can be used to balance classes
+  in binary classification problems, but it’s apparently not applied to
+  validation score calculations (see
+  [discussion](https://github.com/dmlc/xgboost/issues/8184)), so we
+  create sample weight vectors and pass them to `.fit()` as we did
+  before.
 
 <details>
 <summary>Show validation function definition</summary>
@@ -1762,6 +2514,46 @@ def validate_xgb(
 
 </details>
 
+Let’s discuss the numerous parameters of XGBoost we will tune, and the
+search spaces.
+
+- `learning_rate` is is the magnitude of the model update after each
+  boosting round, as in SGD training. The same considerations as
+  explained before apply. A general heuristic is to tune the XGBoost LR
+  between 0.05 and 0.3 for most problems. It’s also possible to use LR
+  scheduling, but we will save this for the NN model.
+
+- `max_depth` is the maximum depth of each tree, an integer value. A
+  higher value will make the model more complex, and more likely to
+  overfit. The default is 6, but we will tune it over a broad range.
+
+- `min_child_weight` is a parameter that affects tree complexity. A
+  higher value will make it harder for the model to justify new splits.
+  This is usually tuned as an integer parameter.
+
+- `gamma` is a special regularization parameter for tree models. It is
+  the minimum loss reduction required to justify another split. The
+  optimal value is often closer to zero.
+
+- `alpha` and `lambda` are L1 and L2 regularization respectively,
+  applied to model weights. L1 is 0 by default, and L2 is 1 by default.
+  We’ll tune both over a wide interval around their defaults, to try
+  different blends of L1 and L2 regularization.
+
+- `subsample` and `colsample_bytree` are the subsampling parameters,
+  both set to 1 by default (meaning no subsampling).
+
+  - Setting a lower value for `subsample` will subsample the training
+    observations by that ratio in every boosting round.
+
+  - A lower value for `colsample_bytree` will subsample the features by
+    that ratio in every boosting round.
+
+  - Subsampling can help make the models more robust against
+    overfitting. It’s possible to subsample features even more
+    frequently than once per round using other hyperparameters (see
+    [documentation](https://xgboost.readthedocs.io/en/stable/parameter.html)).
+
 ``` python
 # Define objective function for hyperparameter tuning
 def objective_xgb(trial):
@@ -1821,6 +2613,13 @@ best_trial_xgb
     state                                              COMPLETE
     Name: 0, dtype: object
 
+The optimal set of hyperparameters yields trees on the shallow side,
+with some regularization. Most interesting is the `colsample_bytree`
+parameter: A value of roughly 0.42 means each tree is built with a
+subsample of 42% of the features in our data, amounting to roughly 37-38
+features. More evidence that we have quite a bit of redundant (or simply
+useless) features in our dataset.
+
 ``` python
 # Create pipeline with final XGB model
 pipe_xgb = Pipeline(steps = [
@@ -1849,7 +2648,68 @@ pipe_xgb = Pipeline(steps = [
 
 ### Neural network with PyTorch
 
-#### Defining PyTorch Lightning classes
+Our final model is a neural network. There is much to explain about how
+neural networks work, and there are many complex architectures, but I’ll
+summarize the basic idea starting from a simple linear regression:
+
+- In a linear regression equation, the **inputs** are the features.
+  These inputs are multiplied with their respective **weights**
+  (coefficients) and summed up, along with a **bias** (intercept) value.
+  This gives us the **output / prediction**.
+
+- One such linear regression equation is equivalent to **one neuron /
+  linear unit** in a neural network. A **layer** is an organization of
+  numerous neurons / units, or another transformation that is applied to
+  the inputs.
+
+- The inputs of a neural network are equivalent to the original
+  features, as they are fed into the network. The **output layer** is
+  the last layer that gives the final output / prediction of the
+  network.
+
+- A **hidden layer** is any layer between the network inputs and the
+  output layer. The inputs of neurons in a hidden layer consist of the
+  outputs of the previous layer (for the first hidden layer, simply the
+  input features). Hidden layer neurons each apply their own weights and
+  bias terms to the inputs, and pass their outputs to the next layer. In
+  general, **deep neural networks** are those with multiple or many
+  hidden layers.
+
+  - We can think of a multiple linear regression model (with numerous
+    predictors) as a single neuron / linear unit with multiple inputs.
+
+  - When we fit a linear regression model, we estimate a single
+    coefficient for each predictor, and one intercept term. In a neural
+    network, we estimate a weight for each input of each neuron, and a
+    bias term for each neuron.
+
+**Activation functions** can be applied after a layer, to apply a
+mathematical transformation to its outputs before passing them on to the
+next layer as inputs.
+
+- With activation functions and hidden layers, the network can learn
+  non-linear and complex relationships.
+
+- With a binary classification problem, a sigmoid activation function is
+  applied to the network’s final, single output, which will transform it
+  from a predicted logit to a probability value between 0 and 1.
+
+Of course, this is the simplest summary of a basic neural network.
+[Here](https://d2l.ai/index.html) is an excellent source for more
+information on many aspects of deep learning.
+
+#### Defining PyTorch & Lightning classes
+
+To build and train our NN model, we will use the PyTorch, and the
+associated Lightning framework which makes it much more easier to
+organize PyTorch code. We’ll define several custom PyTorch and Lightning
+classes according to our needs, based on existing class templates.
+
+First, we need to define a `Dataset` class. This class will store our
+data as Torch tensors. Its methods will return one row at a time, as a
+pair of feature tensors & target tensor, and the data length. We create
+a separate class for training & testing data, as the latter won’t have
+associated target values.
 
 <details>
 <summary>Show Dataset class creation</summary>
@@ -1871,7 +2731,7 @@ class TrainDataset(torch.utils.data.Dataset):
   def __len__(self):
     return len(self.x) 
   
-  # Return a pair of features & target
+  # Return a pair of features & target (one training observation)
   def __getitem__(self, idx):
     return self.x[idx], self.y[idx]
 
@@ -1893,6 +2753,13 @@ class TestDataset(torch.utils.data.Dataset):
 ```
 
 </details>
+
+Next, we define our `Lightning Module`. This is the core class that will
+store our model architecture & hyperparameters, define our training,
+validation & prediction loops, and more. The explanation of each class
+method is better left to the code comments below. We’ll discuss the
+model architecture and hyperparameters afterwards.
+
 <details>
 <summary>Show Lightning Module class creation</summary>
 
@@ -1923,7 +2790,7 @@ class SeluDropoutModel(pl.LightningModule):
     self.loss_alpha = hyperparams_dict["loss_alpha"]
     self.loss_gamma = hyperparams_dict["loss_gamma"]
     
-    # Define architecture 
+    # Define network architecture 
     # Initialize layers list with first hidden layer
     self.layers_list = torch.nn.ModuleList([
       torch.nn.Linear(self.input_size, self.hidden_size), # Hidden layer 1
@@ -1931,7 +2798,7 @@ class SeluDropoutModel(pl.LightningModule):
       torch.nn.AlphaDropout(self.dropout) # Dropout 1
       ])
     
-    # Append extra hidden layers to layers list, according to hyperparameter
+    # Add extra hidden layers to layers list, according to hyperparameter
     for n in range(0, (self.n_hidden_layers - 1)):
       self.layers_list.extend([
         torch.nn.Linear(self.hidden_size, self.hidden_size), # Hidden layer N
@@ -1939,16 +2806,17 @@ class SeluDropoutModel(pl.LightningModule):
         torch.nn.AlphaDropout(self.dropout) # Dropout N
       ])
     
-    # Append output layer to layers list
+    # Add final output layer to layers list
     self.layers_list.append(
       torch.nn.Linear(self.hidden_size, 1) # Output layer
       # No sigmoid activation here, because the loss function has that built-in
       )
       
-    # Define full network from layers list
+    # Create full network from layers list
     self.network = torch.nn.Sequential(*self.layers_list)
     
-    # Sigmoid activation for prediction step only, not part of forward propagation
+    # Sigmoid activation for prediction step only, not part of forward 
+    # propagation as the loss function has sigmoid activation built in
     self.sigmoid = torch.nn.Sequential(torch.nn.Sigmoid())
       
     # Initialize weights to conform with self-normalizing SELU activation
@@ -1973,7 +2841,9 @@ class SeluDropoutModel(pl.LightningModule):
     # Loss function applies sigmoid activation before calculating focal loss
     loss = torchvision.ops.sigmoid_focal_loss(
       output, y, 
-      alpha = self.loss_alpha, gamma = self.loss_gamma, 
+      alpha = self.loss_alpha, # Positive class weight parameter
+      gamma = self.loss_gamma, # Parameter that discounts "easy" training examples 
+                               # in loss calculation
       reduction = "mean") 
     
     # Log training loss
@@ -2025,10 +2895,10 @@ class SeluDropoutModel(pl.LightningModule):
       optimizer, 
       base_lr = self.learning_rate, # Lowest LR at start of each cycle
       max_lr = (self.learning_rate * 5), # Highest LR at the end of first cycle
-      mode = "exp_range", # Exponentially decreasing maximum LR
-      gamma = 0.99995, # Decrease factor for maximum LR
-      step_size_up = 200, # Training steps to go from base LR to max. LR. 
-                          # Heuristic: (2-8 * steps (batches) in one epoch)
+      mode = "exp_range", # Exponentially decreasing max. LR
+      gamma = 0.99995, # Reduction factor for max. LR
+      step_size_up = 200, # Training steps to go from base LR to max. LR. once 
+                          # Heuristic: (2-8 * (steps (batches) in one epoch))
       cycle_momentum = False # Not compatible with Adam optimizer 
       )
     
@@ -2043,11 +2913,181 @@ class SeluDropoutModel(pl.LightningModule):
 ```
 
 </details>
+
+The model architecture above consists of at least one hidden layer, and
+it is possible to add more hidden layers depending on the
+`n_hidden_layers` parameter, which we’ll tune.
+
+- In theory, **one hidden layer** enables us to solve non-linear
+  separation problems, and **two hidden layers** enable us to solve
+  problems with multiple disconnected decision boundaries. More complex
+  problems may require more layers, but in general, we want to use the
+  simplest architecture that solves our problem (here’s a good
+  [article](https://www.baeldung.com/cs/neural-networks-hidden-layers-criteria)
+  that talks about this in more detail).
+
+- The first hidden layer will take in our features as inputs, so the
+  `input size` hyperparameter has to equal the number of features. We’ll
+  give this as a hyperparameter to the model, but we won’t tune it.
+
+- The **output size** of the first hidden layer will equal the input &
+  output sizes of any subsequent hidden layer(s). We will tune this as
+  the `hidden_size` hyperparameter.
+
+  - It’s also possible to set a different hyperparameter for the output
+    size of each subsequent hidden layer and tune them separately, so
+    the layers constantly get smaller as we move forward in the network.
+
+  - The output size of a hidden layer also equals the number of neurons
+    / units in that layer, as 1 neuron = 1 output. Generally, we want
+    hidden layer sizes to be between the network input size (number of
+    features) and the final output size (one in this case).
+
+- The output layer will only have one output, the predicted logit for
+  the positive class. We won’t apply a sigmoid activation at the end of
+  the network, as our loss function applies sigmoid activation before
+  calculating the loss.
+
+- Each hidden layer will be followed by a **SELU** activation function
+  layer. This stands for “scaled exponential linear unit”. The SELU
+  activation will enable us to model non-linear relationships, while
+  also enforcing a self-normalizing property on the layer outputs (see
+  [original paper](https://arxiv.org/abs/1706.02515)).
+
+  - Neural networks can be prone to numerical instability issues, so
+    it’s a common approach to apply forms of scaling / normalization
+    **inside the network**, to the outputs of layers, before passing
+    them on to the next layer.
+
+  - The most common method for in-network normalization is adding
+    **batch normalization layers**, but apparently it can conflict with
+    the application of **dropout layers** (see a detailed discussion
+    related to
+    [this](https://stackoverflow.com/questions/39691902/ordering-of-batch-normalization-and-dropout)).
+
+  - The scaling / normalization we apply to our features in
+    preprocessing can also be applied as the first layer of a network.
+
+- The SELU activation after each hidden layer will be followed by a
+  **dropout layer**.
+
+  - This is a form of regularization which randomly drops out a fraction
+    of the next layer’s inputs at each training step. Lightning
+    automatically disables dropout when predicting with a trained NN
+    model.
+
+  - When neural networks overfit, they tend to learn noise as a very
+    specific combination of weights across layers. Dropout breaks these
+    combinations, forcing the network to generalize better.
+
+  - We will use **alpha dropout,** which is applied after SELU
+    activation, and maintains the self-normalizing property of SELU
+    outputs.
+
+  - The probability of dropping each input is another hyperparameter we
+    will tune, as `dropout`. Obviously, a higher probability will result
+    in more severe regularization and possible underfitting.
+
+Our training loss function is going to be **focal loss,** which was
+developed for highly imbalanced classification problems in image
+recognition (see [original paper](https://arxiv.org/abs/1708.02002)).
+This loss function discounts the errors made for “easily classified”
+training examples, focusing the model’s attention on difficult training
+examples.
+
+- This loss function has two parameters, `alpha` and `gamma`, which we
+  will tune as hyperparameters.
+
+- A higher `alpha` value assigns more weight to positive class
+  observations when calculating the loss, similar to our class weighting
+  for previous models’ loss functions.
+
+- The `gamma` value controls how much “easy” training examples are
+  discounted when calculating the loss. If `gamma = 0`, no discounting
+  is applied, and the loss function becomes equivalent to **cross
+  entropy**, which is a commonly used default loss function for NN
+  classification.
+
+  - Cross entropy is practically equivalent to log loss, which we used
+    previously.
+
+Previously, we used the same loss function both to train our models, and
+to score their performance on validation data.
+
+- In general, we want to train & tune models with a loss function that
+  scores probability predictions (more on this in model testing).
+
+- However, when we tune the parameters of focal loss, our loss function
+  becomes part of the optimization problem (just like the class weights
+  we applied to the loss function for the previous models). If we use
+  focal loss also as our validation metric, this will be a form of
+  leakage: We’ll simply get the focal loss parameters that minimize
+  focal loss by changing the metric itself (moving the goalposts in a
+  sense), not necessarily those that maximize model performance.
+
+- Therefore, for validating our NN hyperparameters’ performance, we will
+  use the **average precision** performance metric (which will be
+  explained in model testing). Keep in mind this value is to be
+  **maximized**, and not minimized like a loss function.
+
+Finally, we choose an **optimizer** and an optional **learning rate
+scheduler.**
+
+The optimizer manages how the model weights are updated after each
+training step.
+
+- Recall that NN models are usually trained with a form of minibatch
+  gradient descent: In one training step, a batch of training
+  observations are fed to the model, loss is computed for the
+  predictions and the model weights are updated, taking the learning
+  rate into account.
+
+- Minibatch SGD is available as an optimizer, but the commonly used
+  default is the **Adam** algorithm. It is a robust general purpose
+  optimizer that accelerates convergence and adjusts the learning rate
+  dynamically. This is what we will use.
+
+- Adam can also apply L2 regularization to the model weights. We’ll tune
+  this as our `l2` hyperparameter.
+
+The learning rate scheduler will dynamically adjust the learning rate,
+to ensure we get the best tradeoff between fast & optimal convergence,
+and the risk of overfitting & erratic training steps.
+
+- A simple approach is starting training with a relatively higher LR,
+  and gradually lowering it after a certain number of training steps /
+  epochs are elapsed with no improvement.
+
+- We’ll try a more sophisticated approach: A **cyclic LR scheduler**
+  will cycle the LR from a `base_lr` value to a `max_lr` value, then
+  back down to the `base_lr`, in a certain number of training steps.
+  After each cycle, the `max_lr` will be reduced in an exponential
+  fashion. We’ll tune only the `base_lr` as our hyperparameter
+  `learning_rate`, but it’s possible to tune other parameters of the
+  cyclic scheduler.
+
+- The rationale behind this approach is that a higher LR rate may appear
+  to harm the training process initially, but yield better results later
+  on. By cycling the LR in this fashion, we still decrease the “average”
+  LR over time, while periodically increasing the LR to avoid getting
+  stuck in locally optimal solutions (more on this in the [original
+  paper](https://arxiv.org/abs/1506.01186?ref=jeremyjordan.me), and a
+  good [summary
+  article](https://www.jeremyjordan.me/nn-learning-rate/)).
+
+The last Lightning class we need to create is simply an exact copy of
+the existing Optuna pruner callback, due to compatibility issues
+(similar issues were discussed
+[here](https://stackoverflow.com/questions/69526806/pytorch-model-heplers-py-in-is-overridden-raise-valueerror-expected-a-paren)
+and [here](https://github.com/ray-project/ray/issues/33426)).
+
 <details>
 <summary>Show Optuna pruner creation</summary>
 
 ``` python
-# Optuna code uses pytorch_lightning namespace which causes an error with the pruning callback. Create copy of Optuna pruning callback with lightning.pytorch namespace as a workaround.
+# Optuna code uses old pytorch_lightning namespace which causes an error with the 
+# pruning callback integration. Create copy of the Optuna pruning callback with 
+# the new lightning.pytorch namespace as a workaround.
 class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -2056,6 +3096,51 @@ class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
 </details>
 
 #### Hyperparameter tuning
+
+Now, we define our validation function for the neural network model.
+There are a few more PyTorch and Lightning functions & classes we will
+use to load our data & validate our models.
+
+- We create two `DataLoader` instances in the loop, one each for our
+  training & validation data. The dataloader creates minibatches with
+  the data according to the `batch_size` parameter, and serves these
+  batches to the model for training, validation & prediction.
+
+  - Batch size mainly affects the training speed, though it could affect
+    the model performance as well (for example, smaller batch sizes
+    could result in noisier model updates). Generally, it’s suggested to
+    use the largest batch size possible with the available memory.
+
+  - The training data is shuffled for batching, but not the validation
+    or prediction data.
+
+  - The validation & prediction steps could also be carried out without
+    batching if the available memory is enough.
+
+  - The `num_workers` argument controls the number of parallel processes
+    used by the dataloader. I’ve often had issues with this parameter,
+    so I did not use parallelization.
+
+- We create an early stopping callback, a pruning callback for Optuna
+  trials, and a checkpointing callback that saves the best and last
+  epoch of each trained model to the project directory.
+
+  - The checkpointing is disabled for Optuna trials. We’ll use it for
+    epoch validation, as the checkpoint callback stores the path to the
+    best epoch saved, and the filename includes the epoch number. This
+    can also be viewed directly from the checkpoint file in the
+    `lightning_logs` folder.
+
+- Finally, we create the `Trainer`. The trainer takes the model,
+  dataloaders, callbacks and additional parameters, and performs
+  training, testing and prediction.
+
+  - We set parameters such as a high number of maximum training epochs
+    (as early stopping is active), GPU training options, and logging /
+    checkpointing / model summary options.
+
+  - With GPU training and no parallelization on the dataloaders, the
+    Optuna study of 500 trials took roughly 4 hours on my machine.
 
 <details>
 <summary>Show validation function definition</summary>
@@ -2158,13 +3243,34 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
 
 </details>
 
+Our tuning objective function is similar to the one for XGBoost.
+
+- We’ll try networks with 1 to 5 hidden layers. I’d expect 1 or 2 hidden
+  layers to be enough for this problem, but in previous iterations, 3-4
+  hidden layers performed close to optimal as well.
+
+- We won’t sample a hidden size value directly, but we’ll sample an
+  exponent for the number 2, yielding a hidden size from 2 to 64. All
+  layers will have the same size.
+
+- The default learning rate for the Adam algorithm is 1e-3. We’ll tune
+  from a broad range around that, as learning rate scheduling is in
+  place.
+
+- The focal loss parameter `alpha` takes a value from 0 to 1, which will
+  be our search space. A `gamma` value of 2 is suggested as a good
+  setting by the authors of the [original
+  paper](https://arxiv.org/abs/1708.02002), so we’ll tune from a range
+  around that.
+
 ``` python
 # Define Optuna objective
 def objective_nn(trial):
   
   # Define parameter ranges to tune over & suggest param set for trial
   n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 5)
-  hidden_size = 2 ** trial.suggest_int("hidden_size", 1, 6)
+  hidden_size = 2 ** trial.suggest_int("hidden_size", 1, 6) # Tune hidden size as
+                                                            # exponent of 2
   learning_rate = trial.suggest_float("learning_rate", 5e-4, 5e-2)
   l2 = trial.suggest_float("l2", 5e-5, 1e-2, log = True)
   dropout = trial.suggest_float("dropout", 1e-3, 0.25, log = True)
@@ -2173,7 +3279,7 @@ def objective_nn(trial):
   
   # Create hyperparameters dict
   hyperparams_dict = {
-      "input_size": 90,
+      "input_size": 90, # N. of input features
       "n_hidden_layers": n_hidden_layers,
       "hidden_size": hidden_size,
       "learning_rate": learning_rate,
@@ -2224,6 +3330,35 @@ best_trial_nn
     state                                                PRUNED
     Name: 0, dtype: object
 
+The best tune has 2 hidden layers, each with a size of 16.
+
+- This could mean our feature space is fairly non-linear, but also on
+  the smaller side, as the hidden layer size is much smaller compared to
+  the number of input features.
+
+  - This effectively results in a reduction of the feature space, which
+    was also done by XGBoost in its own way.
+
+- Small amounts of L2 and dropout regularization are applied, but the
+  lower bounds of the search spaces are not reached, so we should be
+  close to the optimal values.
+
+- The base learning rate is considerably higher compared to the default
+  of 0.001.
+
+- An `alpha` of roughly 0.2 means our focal loss function puts a bit
+  more weight on the positive cases, and a `gamma` higher than 2 means
+  “easy” training examples are considerably discounted from the loss
+  calculation.
+
+  - A heuristic suggested by the authors of the [original
+    paper](https://arxiv.org/abs/1708.02002) was `alpha = 0.25` and
+    `gamma = 2`. Our tune is not far from that.
+
+The median best number of epochs for this parameter set was 9, which
+will be set later, in the `Trainer` for our final model. For now, we
+only create our final model instance with the best hyperparameters.
+
 ``` python
 # Define NN model with best parameters (n. epochs is determined later in Trainer)
 hyperparams_dict = {
@@ -2241,7 +3376,13 @@ model_nn = SeluDropoutModel(hyperparams_dict)
 
 ## Model testing
 
+Finally, we’ll train the final versions of our models on the full
+training data, and test their performance on the testing data.
+
 ### Training & prediction with final models
+
+The steps for retrieving the final predictions are mostly explained in
+the code comments below.
 
 ``` python
 # Compute class weight & sample weight vectors
@@ -2250,6 +3391,10 @@ class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
 sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 ```
+
+We’ll use a dummy classifier as our baseline to compare with. It will
+always give the target class ratios in the training data as the
+probability predictions.
 
 ``` python
 # Create dummy classifier which always predicts the prior class probabilities
@@ -2264,6 +3409,9 @@ models_dict = {
   "Neural net": model_nn
 }
 ```
+
+We build, train & retrieve positive class prediction probabilities for
+every model in a loop.
 
 <details>
 <summary>Show training & prediction loop</summary>
@@ -2337,41 +3485,61 @@ for key in models_dict.keys():
 
 ### Calculating performance metrics
 
-<details>
-<summary>Show static metric calculations</summary>
+The first set of metrics we’ll calculate are all dependent on the
+threshold probability: **Precision, recall** and **F1 score.**
 
-``` python
-# Retrieve AP & Brier scores (weighted) for each model
-scores_avg_precision = {}
-scores_brier = {}
+- The **threshold probability** is the minimum positive class
+  probability required to classify an observation as positive. Numerous
+  classification metrics take changing values depending on the threshold
+  used to calculate them.
 
-for key in preds_dict.keys():
+- For binary classification, a default threshold of 0.5 is often
+  assumed, but it’s important to use the ideal threshold depending on
+  the problem, especially with a major class imbalance.
 
-  # Retrieve average precision scores
-  avg_precision = average_precision_score(y_test, preds_dict[key])
-  scores_avg_precision[key] = avg_precision
-  
-  # Retrieve Brier scores
-  brier_score = brier_score_loss(
-    y_test, preds_dict[key], sample_weight = sample_weight_test)
-  scores_brier[key] = brier_score
-  
- 
-# Retrieve Brier skill scores for each model, with dummy classifier as reference
-scores_brier_skill = {}
+- **Precision** refers to the fraction of positive class predictions
+  that were correct (true positives / true positives + false positives).
 
-for key in preds_dict.keys():
-  
-  brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
-  scores_brier_skill[key] = brier_skill
-```
+- **Recall** refers to the fraction of positive cases correctly found,
+  out of all positive cases in the data (true positives / (true
+  positives + false positives).
 
-</details>
+- There is a natural tradeoff between precision and recall:
+
+  - A higher threshold probability naturally means fewer cases are
+    classified as positive. This generally results in higher precision
+    and lower recall.
+
+  - A lower threshold probability naturally means more cases are
+    classified as positive. This generally results in higher recall and
+    lower precision.
+
+- The **F1 score** is the harmonic mean of precision and recall at a
+  given threshold probability. It aims to summarize both metrics at a
+  given threshold. By default, precision and recall are weighted
+  equally, but it’s possible to calculate differently weighted versions.
+
+- We’ll calculate precision, recall and F1 score at various threshold
+  probabilities, for each model. We’ll retrieve the “optimal” threshold
+  probability that maximizes F1 score, and the precision & recall values
+  at this point.
+
+  - We will plot all three scores against the threshold probability to
+    visualize the relationship between them.
+  - In a real-life application, we’d use this plot to choose a threshold
+    probability depending on the nature of our problem, and the
+    importance of each metric.
+
+- We won’t consider plain **accuracy**, as it can be very misleading
+  with a large class imbalance. To give an extreme example, simply
+  predicting the negative class all the time will give us an accuracy of
+  roughly 88%, as that is the ratio of negative cases in our data.
+
 <details>
 <summary>Show dynamic metric calculations</summary>
 
 ``` python
-# Retrieve F1 scores at different thresholds for each model
+# Retrieve F1 scores at different threshold probabilities for each model
 scores_f1 = {}
 scores_f1_best = {}
 
@@ -2407,7 +3575,74 @@ for key in preds_dict.keys():
 
 </details>
 
+Next, we will calculate a few metrics not dependent on the threshold
+probability, as a “summary” of overall model performance.
+
+- **Average precision** is also known as the PRAUC: The area under the
+  precision-recall curve. It takes a value between 0 and 1, higher being
+  better. We’ll explain and discuss this metric later with the
+  precision-recall curve plot.
+
+- **Brier score** is a probability scoring metric that compares
+  predicted probabilities with actual class labels. Similar to log loss,
+  a lower value is better. Unlike log loss, it takes a value between 0
+  and 1.
+
+  - We’ll use the class weighted version as we did with our training
+    loss metrics. The scores will be misleading without class weights
+    due to the imbalance, as they will be dominated by the scores for
+    the majority class.
+
+  - It’s always a good idea to assess the probability predictions
+    themselves, rather than just class predictions. They may be more
+    important and useful than class predictions in many cases (weather
+    forecasts, risk assessments, medical tests).
+
+    - Intuitively, it also makes sense to aim for the best probability
+      predictions regardless of the threshold probability, as they are
+      the raw output of our models. This is why we trained & validated
+      our models with loss metrics.
+
+- The **Brier skill score** compares the Brier score of a classifier
+  with another baseline Brier score. This time, a higher score means a
+  bigger improvement over the baseline. We’ll calculate this with our
+  dummy classifier as the baseline.
+
+<details>
+<summary>Show static metric calculations</summary>
+
+``` python
+# Retrieve AP & Brier scores (weighted) for each model
+scores_avg_precision = {}
+scores_brier = {}
+
+for key in preds_dict.keys():
+
+  # Retrieve average precision scores
+  avg_precision = average_precision_score(y_test, preds_dict[key])
+  scores_avg_precision[key] = avg_precision
+  
+  # Retrieve Brier scores
+  brier_score = brier_score_loss(
+    y_test, preds_dict[key], sample_weight = sample_weight_test)
+  scores_brier[key] = brier_score
+  
+ 
+# Retrieve Brier skill scores for each model, with dummy classifier as reference
+scores_brier_skill = {}
+
+for key in preds_dict.keys():
+  
+  brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
+  scores_brier_skill[key] = brier_skill
+```
+
+</details>
+
 ### Summary table of performance metrics
+
+Now, let’s start reviewing our metrics. First, we start with a summary
+table.
 
 <details>
 <summary>Show code to get summary table</summary>
@@ -2433,32 +3668,65 @@ print(df_scores)
                 Avg. precision (PRAUC)  Brier score (class weighted)   
     Dummy                       0.1226                        0.3925  \
     Logistic                    0.4167                        0.1959   
-    SVM                         0.3437                        0.2098   
+    SVM                         0.3424                        0.2099   
     XGBoost                     0.4674                        0.1920   
     Neural net                  0.4337                        0.3138   
 
                 Brier skill score (class weighted)  Best F1 score   
     Dummy                                   0.0000         0.2184  \
     Logistic                                0.5009         0.4069   
-    SVM                                     0.4655         0.3696   
+    SVM                                     0.4651         0.3689   
     XGBoost                                 0.5109         0.4225   
     Neural net                              0.2004         0.3966   
 
                 Precision at best F1  Recall at best F1   
     Dummy                     0.1226             1.0000  \
     Logistic                  0.4310             0.3854   
-    SVM                       0.3495             0.3922   
+    SVM                       0.3473             0.3933   
     XGBoost                   0.4434             0.4035   
     Neural net                0.3766             0.4188   
 
                 Threshold prob. at best F1  
     Dummy                           0.1226  
     Logistic                        0.6338  
-    SVM                             0.6537  
+    SVM                             0.6186  
     XGBoost                         0.6432  
     Neural net                      0.1855  
 
+All models are a huge improvement over the baseline classifier. XGBoost
+seems to perform the best overall, in almost all summary metrics.
+
+- The NN model follows XGBoost in average precision, and has the highest
+  recall at the “optimal” threshold, but also the worst Brier scores.
+
+  - We calculated Brier scores by fully balancing the contributions of
+    each class with class weights. All models except the NN were trained
+    in the same fashion, but the NN was trained with less weight on the
+    positive class.
+
+  - This results in a “worse” weighted Brier score for the NN, but it
+    would likely have the best unweighted Brier score as well. Which
+    score is more important for assessing performance is dependent on
+    the use case.
+
+  - We also see the “optimal” threshold is much lower for the NN model
+    than for the class weighted models. We’ll talk about this in more
+    detail with the predicted probabilities plot.
+
+- The logistic regression model comes next in average precision, and
+  beats the NN model in Brier, F1 and “optimal” precision scores. It’s
+  likely a very efficient alternative to the XGBoost and NN models.
+
+- The SVM model performs considerably worse than the other models, and
+  this could have several reasons. The kernel approximation we performed
+  may not be well suited to this feature set. The approximated
+  probability predictions may not be very reliable. Still, it’s likely
+  an effective model on its own.
+
 ### Precision - recall curves
+
+We can visualize the tradeoff between precision and recall with the
+precision-recall curve (PRC) plot.
 
 <details>
 <summary>Show code to plot PRC curves</summary>
@@ -2478,7 +3746,29 @@ plt.close("all")
 
 ![](Report_files/figure-commonmark/cell-82-output-1.png)
 
+In the plot above, each curve starts with a threshold probability of 1,
+and ends with a threshold probability of 0. As a consequence, precision
+drops and recall increases as we move to the right.
+
+- A very skilled classifier would lose very little precision as it
+  increases recall. The curve would be very close to the top right
+  corner.
+
+- Calculating the **area under the precision-recall curve (PRAUC)**
+  summarizes this tradeoff, and the overall model performance at all
+  thresholds. This is equivalent to the **average precision** metric we
+  previously calculated.
+
+- We see the XGBoost model has the best PRC curve at pretty much any
+  threshold probability. The NN model outperforms the logistic model at
+  lower thresholds, and the logistic model outperforms the NN model at
+  higher thresholds.
+
 ### F1 score - precision - recall plots
+
+Another way to look at the tradeoff between precision and recall is to
+plot both, along with the F1 scores, across various threshold
+probabilities.
 
 <details>
 <summary>Show code to get F1 plots dataframes</summary>
@@ -2587,7 +3877,30 @@ plt.close("all")
 
 ![](Report_files/figure-commonmark/cell-84-output-1.png)
 
+We see a major difference between the class weighted models, and the NN
+model trained with focal loss.
+
+- The class weighted models reach their maximum F1 score around a
+  threshold probability of 0.6 - 0.65. Recall declines and precision
+  increases mainly after 0.3.
+
+- In contrast, the NN model reaches its maximum F1 score around a
+  threshold probability of 0.18 - 0.19. Recall sharply declines and
+  precision sharply increases after around 0.12 - 0.13.
+
+- This suggests the class weighted models ascribe much higher positive
+  class probabilities to predictions compared to the NN model. We’ll see
+  this clearly in the next plot.
+
+- The plot above can be used in real-life applications to see how each
+  score changes with the threshold, and to choose an ideal threshold
+  depending on which score is more important for the problem at hand.
+
 ### Predicted probability distributions
+
+Let’s look at the distributions of positive class probabilities
+predicted by our models to better see the difference between the class
+weighted models and the focal loss NN model.
 
 <details>
 <summary>Show code to get predicted prob. dataframes</summary>
@@ -2681,11 +3994,144 @@ plt.close("all")
 
 ![](Report_files/figure-commonmark/cell-86-output-1.png)
 
+In the plot above, we have a stacked histogram of predicted positive
+class probabilities, colored by their actual target values.
+
+- A very skilled classifier would separate the probability predictions
+  of the two classes as much as possible:
+
+  - The predicted probabilities for negative cases (blue bins) would be
+    mostly gathered to the left, close to 0.
+
+  - The predicted probabilities for positive cases (orange bins) would
+    be mostly gathered to the right, close to 1.
+
+- The class weighted models predict relatively higher positive class
+  probabilities for all cases, including the negatives.
+
+  - The probabilities for the negative cases are close to normally
+    distributed, with a median around 0.35 - 0.4.
+
+  - The probabilities for the positive cases are generally higher, but
+    more uniformly distributed. Many are higher than 0.8, but many are
+    also between 0.2 - 0.6, and overlap with many negative cases.
+
+  - This suggests the models can easily classify the most extreme
+    positive cases, but also have trouble telling apart less obvious
+    positives from negative cases. This is usually difficult with a
+    large class imbalance.
+
+  - Due to being trained with class weights, the models are “tuned” to
+    predict relatively high positive probabilities overall. This is why
+    their “optimal” threshold probabilities are much higher.
+
+- The probability predictions of the NN model are distributed quite
+  differently. The vast majority of cases have very low positive class
+  probabilities, mostly below 0.2.
+
+  - The probabilities for the negative cases are roughly close to
+    normally distributed, around maybe 0.16 - 0.17.
+
+  - Almost the same distribution shape applies to the positive cases,
+    but with a very long right tail. There are “outlier” positive cases
+    with predicted probabilities much higher than 0.2. These are likely
+    the most extreme positive cases.
+
+  - This explains why the “optimal” threshold probability is much lower:
+    The NN model, trained with focal loss, puts less weight on the
+    positive cases, and predicts lower positive probabilities across the
+    board, compared to the class weighted models’ predictions.
+
+- Both types of probability predictions likely have their pros and cons,
+  and the best approach depends on the use case.
+
+  - The probabilities predicted by the class weighted models could be
+    considered “unrealistic”, as they are tuned to be relatively high
+    across the board.
+
+    - For this problem, it may be unlikely most cars actually have a
+      moderately high probability of being kicks. On the other hand, the
+      XGBoost model clearly performs the best overall in terms of
+      classification performance.
+
+  - In contrast, the probabilities predicted by the focal loss NN model
+    could be considered more realistic, as they are low for the vast
+    majority of cases, and quite high for a small number of cases.
+
+  <!-- -->
+
+      -   Intuitively, we'd expect most cars to have a smaller chance of being kicks, with a few high-risk ones. The NN model also seems to "separate" the riskiest cars from the rest to a higher degree.
+
 ## Sensitivity analysis
+
+The classification models output probability predictions of class
+membership, and it’s up to us to decide how to use these probabilities
+for our real-life problem. We’ll illustrate this with a simple
+hypothetical business case.
 
 ### Problem formulation
 
+In our scenario, we evaluate which cars to purchase from our testing
+data, based on their predicted probabilities of being kicks.
+
+- We’ll assume we make some profit from purchasing good cars, and incur
+  a certain loss from purchasing kicks.
+
+- We’ll aim to maximize our **equity** $E$ by changing two variables:
+  The $N$ **number of cars** we intend to purchase, and the $t$
+  **threshold probability** for classifying them as kicks.
+
+  - We’ll sort the cars in ascending order according to their $p$
+    **predicted probabilities of being a kick**.
+
+  - We will subset the top $N$ cars, and purchase them if $p < t$, pass
+    them if $p \ge t$.
+
+- If we purchase a good car, we’ll assume the car was worth what we
+  paid, and we’ll get 10% of the **purchase price** $C$ as profit, or a
+  return on our investment from using it.
+
+  - The net change in our equity will be $-C + C + 0.1C = 0.1C$.
+
+- If we purchase a kick, we’ll assume the car is useless, and we can
+  only recover 20% of the purchase price as salvage value.
+
+  - The net change in our equity will be $-C+0.2C=-0.8C$.
+
+With these assumptions, we can represent our equity value with the
+following expressions:
+
+> $E = sum_{i=1}^N (0.1 * C_i - 0.9 * C_i * k_i) * d_i$,
+>
+> where
+>
+> $k_i = 0$ for good cars, $k_i = 1$ for kicks,
+>
+> $d_i = 0$ if $p_i < t$,
+>
+> $d_i = 1$ if $p_i \ge t$.
+
+I originally wanted to treat this as a linear programming problem, and
+solve for the optimal number of cars to buy, and the optimal threshold
+probability, using each model’s predicted probabilities. After some
+research, I realized this is more complex than I originally expected, as
+we have conditional constraints in this problem.
+
+Instead, we’ll perform a **sensitivity analysis,** by calculating the
+equity at various combinations of the number of cars to buy and the
+threshold probability, for each model. This will still give us
+quasi-optimal solutions for our problem, which shouldn’t be too far from
+the actual optimal value.
+
 ### Calculations
+
+The code to perform the necessary calculations is available below,
+explained by the code comments. We will try 100 values for the number of
+cars to buy, and 100 values for the threshold probability. We’ll
+calculate an equity value for each combination, for each model’s
+predictions. With more than 14k observations in our testing set, this
+takes several minutes on my machine. There could be a way to program
+this better.
 
 <details>
 <summary>Show code to get sensitivity analysis input
@@ -2861,6 +4307,9 @@ df_long = df_long.drop_duplicates(["Purchases", "Profits", "Model"])
 
 ### Plots and quasi-optimal solutions
 
+We’ll plot and compare the results of our sensitivity analysis for each
+model.
+
 <details>
 <summary>Show code to plot sensitivity analysis</summary>
 
@@ -2895,6 +4344,31 @@ plt.close("all")
 </details>
 
 ![](Report_files/figure-commonmark/cell-90-output-1.png)
+
+We see very similar, steady curves for the class weighted models.
+
+- The highest profits are reached at around 0.5 threshold probability,
+  with 9.5k-10k cars purchased out of more than 14k.
+
+- The profits increase steadily as we increase the threshold to this
+  point, and decline steadily afterwards.
+
+In contrast, the curves for the NN model, trained with focal loss, are
+much more different.
+
+- Profits sharply rise to their highest values around 0.2 threshold
+  probability, with 9.5k-10k cars purchased. They also decline sharply
+  afterwards.
+
+The most profitable model overall is XGBoost, though the NN and logistic
+regression come close. SVM trails behind considerably.
+
+- The NN and logistic models reach a slightly higher profit value at
+  some sub-optimal values for number of cars purchased. So they could
+  still be preferred to XGBoost in case our number of purchases are
+  limited.
+
+Below, we view the quasi-optimal solutions for each model as a table.
 
 <details>
 <summary>Show code to retrieve quasi-optimal solutions</summary>
@@ -2934,8 +4408,38 @@ print(df_optimal)
                Model Optimal threshold prob. N. cars purchased Profits, $mil
     1888       Dummy                  0.1300               300        0.0246
     6916    Logistic                  0.4700             10100        3.2831
-    7641         SVM                  0.5200             10100        2.7828
+    6760         SVM                  0.4600              9000        2.7671
     6911     XGBoost                  0.4700              9600        3.2962
     2562  Neural net                  0.1700              9700        3.1537
 
 ## Conclusions
+
+We tested several classifiers, from simple logistic regression to a
+neural network model. We went over a typical hyperparameter tuning &
+performance evaluation workflow, with classification metrics suited to
+the problem at hand. We saw that XGBoost performed better than a NN
+model, and logistic regression held up very well compared to its
+efficiency and simplicity. SVM trailed behind, but also performed
+decently for a highly imbalanced problem, and we didn’t pay much
+attention to the kernel choice. Training & tuning the logistic & SVM
+models with stochastic gradient descent saved a lot of time on a large
+dataset.
+
+We applied class weights to the training loss functions to try and
+handle the class imbalance. We also tried focal loss, which was
+specifically designed for heavily imbalanced problems. It’s hard to say
+which approach is “better”, as we tried them across different
+algorithms. It’s clear they result in very different probability
+predictions, so that should be taken into consideration for real-life
+applications. It would be interesting to implement focal loss as a
+custom scikit-learn metric, and repeat this experiment by training the
+other models with focal loss.
+
+Finally, my main goal with this project was to practice building &
+tuning a neural network model directly using PyTorch, instead of using
+predefined architectures or wrappers. However, the final part of the
+analysis sparked my interest in linear programming and optimization
+problems. I plan to explore this topic further, as it seems
+complementary to machine learning methods.
+
+Any comments or suggestions are welcome.

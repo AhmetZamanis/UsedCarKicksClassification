@@ -2576,9 +2576,47 @@ In the plot above, we have a stacked histogram of predicted positive class proba
 
 ## Sensitivity analysis
 
+The classification models output probability predictions of class membership, and it's up to us to decide how to use these probabilities for our real-life problem. We'll illustrate this with a simple hypothetical business case.
+
 ### Problem formulation
 
+In our scenario, we evaluate which cars to purchase from our testing data, based on their predicted probabilities of being kicks.
+
+-   We'll assume we make some profit from purchasing good cars, and incur a certain loss from purchasing kicks.
+
+-   We'll aim to maximize our **equity** $E$ by changing two variables: The $N$ **number of cars** we intend to purchase, and the $t$ **threshold probability** for classifying them as kicks.
+
+    -   We'll sort the cars in ascending order according to their $p$ **predicted probabilities of being a kick**.
+
+    -   We will subset the top $N$ cars, and purchase them if $p < t$, pass them if $p \ge t$.
+
+-   If we purchase a good car, we'll assume the car was worth what we paid, and we'll get 10% of the **purchase price** $C$ as profit, or a return on our investment from using it.
+
+    -   The net change in our equity will be $-C + C + 0.1C = 0.1C$.
+
+-   If we purchase a kick, we'll assume the car is useless, and we can only recover 20% of the purchase price as salvage value.
+
+    -   The net change in our equity will be $-C+0.2C=-0.8C$.
+
+With these assumptions, we can represent our equity value with the following expressions:
+
+> $E = sum_{i=1}^N (0.1 * C_i - 0.9 * C_i * k_i) * d_i$,
+>
+> where
+>
+> $k_i = 0$ for good cars, $k_i = 1$ for kicks,
+>
+> $d_i = 0$ if $p_i < t$,
+>
+> $d_i = 1$ if $p_i \ge t$.
+
+I originally wanted to treat this as a linear programming problem, and solve for the optimal number of cars to buy, and the optimal threshold probability, using each model's predicted probabilities. After some research, I realized this is more complex than I originally expected, as we have conditional constraints in this problem.
+
+Instead, we'll perform a **sensitivity analysis,** by calculating the equity at various combinations of the number of cars to buy and the threshold probability, for each model. This will still give us quasi-optimal solutions for our problem, which shouldn't be too far from the actual optimal value.
+
 ### Calculations
+
+The code to perform the necessary calculations is available below, explained by the code comments. We will try 100 values for the number of cars to buy, and 100 values for the threshold probability. We'll calculate an equity value for each combination, for each model's predictions. With more than 14k observations in our testing set, this takes several minutes on my machine. There could be a way to program this better.
 
 ```{python GetAnalysisInputs}
 #| code-fold: true
@@ -2751,6 +2789,8 @@ df_long = df_long.drop_duplicates(["Purchases", "Profits", "Model"])
 
 ### Plots and quasi-optimal solutions
 
+We'll plot and compare the results of our sensitivity analysis for each model.
+
 ```{python PlotSensitivity}
 #| code-fold: true
 #| code-summary: "Show code to plot sensitivity analysis"
@@ -2781,6 +2821,22 @@ _ = ax[2].set_ylabel("Profits, $mil")
 plt.show()
 plt.close("all")
 ```
+
+We see very similar, steady curves for the class weighted models.
+
+-   The highest profits are reached at around 0.5 threshold probability, with 9.5k-10k cars purchased out of more than 14k.
+
+-   The profits increase steadily as we increase the threshold to this point, and decline steadily afterwards.
+
+In contrast, the curves for the NN model, trained with focal loss, are much more different.
+
+-   Profits sharply rise to their highest values around 0.2 threshold probability, with 9.5k-10k cars purchased. They also decline sharply afterwards.
+
+The most profitable model overall is XGBoost, though the NN and logistic regression come close. SVM trails behind considerably.
+
+-   The NN and logistic models reach a slightly higher profit value at some sub-optimal values for number of cars purchased. So they could still be preferred to XGBoost in case our number of purchases are limited.
+
+Below, we view the quasi-optimal solutions for each model as a table.
 
 ```{python OptimalSolutions}
 #| code-fold: true
@@ -2816,3 +2872,11 @@ print(df_optimal)
 ```
 
 ## Conclusions
+
+We tested several classifiers, from simple logistic regression to a neural network model. We went over a typical hyperparameter tuning & performance evaluation workflow, with classification metrics suited to the problem at hand. We saw that XGBoost performed better than a NN model, and logistic regression held up very well compared to its efficiency and simplicity. SVM trailed behind, but also performed decently for a highly imbalanced problem, and we didn't pay much attention to the kernel choice. Training & tuning the logistic & SVM models with stochastic gradient descent saved a lot of time on a large dataset.
+
+We applied class weights to the training loss functions to try and handle the class imbalance. We also tried focal loss, which was specifically designed for heavily imbalanced problems. It's hard to say which approach is "better", as we tried them across different algorithms. It's clear they result in very different probability predictions, so that should be taken into consideration for real-life applications. It would be interesting to implement focal loss as a custom scikit-learn metric, and repeat this experiment by training the other models with focal loss.
+
+Finally, my main goal with this project was to practice building & tuning a neural network model directly using PyTorch, instead of using predefined architectures or wrappers. However, the final part of the analysis sparked my interest in linear programming and optimization problems. I plan to explore this topic further, as it seems complementary to machine learning methods.
+
+Any comments or suggestions are welcome.
