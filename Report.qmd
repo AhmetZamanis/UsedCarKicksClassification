@@ -1317,25 +1317,27 @@ Next is our XGBoost model, a **gradient boosting** algorithm. Gradient boosting 
 
 -   Tree-based models learn relationships & make predictions by splitting the data according to the predictor values.
 
-    -   This means they can model non-linear relationships, and find interaction effects even if they are not explicitly mapped as features.
+    -   This means they can natively model non-linear relationships, and find interaction effects even if they are not explicitly mapped as features (though doing so may still improve performance).
 
     -   However, they can't extrapolate relationships between predictors and the target outside of the observed training data.
 
-        -   For example, for a feature X and target Y, a relationship of Y = 2X will be easily modeled and predicted by a linear model, even if X takes a very large value not seen in training. A tree-based model, however, will continue predicting according to the highest X value seen in training.
+        -   For example, for a feature X and target Y, a relationship of Y = 2X will be easily modeled and extrapolated by a linear model, even if X takes a very large value not seen in training. A tree-based model, however, will continue predicting according to the highest X value seen in training.
 
--   No hard assumptions are made about the data, though curse of dimensionality can make it harder to identify the optimal splits and potentially hamper prediction performance.
+-   No hard assumptions are made about the data, though too many features can make it harder to identify the optimal splits and potentially hamper prediction performance.
 
     -   Normally, a single decision tree with too few predictors & splits will tend to underfit, and one with too many predictors & splits will tend to overfit. In XGBoost, we control the complexity of each tree with several hyperparameters. Generally, we build numerous shallow trees (called **weak learners**) and ensemble them to arrive at a robust final prediction.
 
     -   XGBoost can apply several types of regularization & sampling to further control the tradeoff between overfitting and underfitting. Tuning the numerous hyperparameters is crucial for good performance.
 
+    -   While model performance may not be impacted by multicollinearity in the feature set, the **feature importance scores** that can be extracted from tree-based models can be misleading. These only look at the relevancy between the target and the features, without taking their redundancy with one another into account (for more on this, see [this article](https://towardsdatascience.com/mrmr-explained-exactly-how-you-wished-someone-explained-to-you-9cf4ed27458b).).
+
 While there are many more hyperparameters to tune for XGBoost, the code is simpler.
 
--   We can simply pass the validation set while training an XGBoost model, which automatically handles early stopping, records the best validation score and the best round.
+-   We can simply pass a validation set while training an XGBoost model, which automatically handles early stopping, records the best validation score and the best round.
 
 -   **Callbacks** are objects that monitor model training and perform a certain action based on a condition, most commonly early stopping. Optuna includes a special pruning callback integration for XGBoost, so we don't have to manually report scores to the Optuna study.
 
--   XGBoost supports GPU training, which will save us some training time. With 1000 trials, the Optuna study took roughly 25-30 minutes.
+-   XGBoost supports GPU training, which will save us some training time. With 1000 trials, the Optuna study took roughly 25-30 minutes on my GPU.
 
 -   The `scale_pos_weight` hyperparameter can be used to balance classes in binary classification problems, but it's apparently not applied to validation score calculations (see [discussion](https://github.com/dmlc/xgboost/issues/8184)), so we create sample weight vectors and pass them to `.fit()` as we did before.
 
@@ -1429,21 +1431,21 @@ def validate_xgb(
 
 Let's discuss the numerous parameters of XGBoost we will tune, and the search spaces.
 
--   `learning_rate` is is the magnitude of the model update after each boosting round, similar to in SGD training. The same considerations as explained before apply. A general suggestion is to tune the XGBoost LR between 0.05 and 0.3 for most problems. It's also possible to use LR scheduling, but we will save this for the NN model.
+-   `learning_rate` is is the magnitude of the model update after each boosting round, as in SGD training. The same considerations as explained before apply. A general heuristic is to tune the XGBoost LR between 0.05 and 0.3 for most problems. It's also possible to use LR scheduling, but we will save this for the NN model.
 
 -   `max_depth` is the maximum depth of each tree, an integer value. A higher value will make the model more complex, and more likely to overfit. The default is 6, but we will tune it over a broad range.
 
 -   `min_child_weight` is a parameter that affects tree complexity. A higher value will make it harder for the model to justify new splits. This is usually tuned as an integer parameter.
 
--   `gamma` is a special regularization parameter for trees. It is the minimum loss reduction required to justify another split. The optimal value is often closer to zero.
+-   `gamma` is a special regularization parameter for tree models. It is the minimum loss reduction required to justify another split. The optimal value is often closer to zero.
 
--   `alpha` and `lambda` are L1 and L2 regularization respectively, applied to model weights. L1 is 0 by default, and L2 is 1 by default. We'll tune both over a wide interval to try different blends of L1 and L2 regularization.
+-   `alpha` and `lambda` are L1 and L2 regularization respectively, applied to model weights. L1 is 0 by default, and L2 is 1 by default. We'll tune both over a wide interval around their defaults, to try different blends of L1 and L2 regularization.
 
 -   `subsample` and `colsample_bytree` are the subsampling parameters, both set to 1 by default (meaning no subsampling).
 
     -   Setting a lower value for `subsample` will subsample the training observations by that ratio in every boosting round.
 
-    -   A lower value for `colsample_bytree` will subsample the training features by that ratio in every boosting round.
+    -   A lower value for `colsample_bytree` will subsample the features by that ratio in every boosting round.
 
     -   Subsampling can help make the models more robust against overfitting. It's possible to subsample features even more frequently than once per round using other hyperparameters (see [documentation](https://xgboost.readthedocs.io/en/stable/parameter.html)).
 
@@ -1490,7 +1492,7 @@ best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
 best_trial_xgb
 ```
 
-The optimal set of hyperparameters yields trees on the shallow side, with some regularization. Most interesting is the `colsample_bytree` parameter: A value of roughly 0.42 means each tree is built with a subsample of 42% of the features in our data, amounting to roughly 37-38 features. More evidence that we have quite a bit of redundancy in our features.
+The optimal set of hyperparameters yields trees on the shallow side, with some regularization. Most interesting is the `colsample_bytree` parameter: A value of roughly 0.42 means each tree is built with a subsample of 42% of the features in our data, amounting to roughly 37-38 features. More evidence that we have quite a bit of redundant (or simply useless) features in our dataset.
 
 ```{python FinalModelXGB}
 
@@ -1521,27 +1523,27 @@ pipe_xgb = Pipeline(steps = [
 
 ### Neural network with PyTorch
 
-Our final model is a neural network. There is much to explain about how NNs work, and there are many complex architectures, but I'll summarize the main idea starting from a simple linear regression:
+Our final model is a neural network. There is much to explain about how neural networks work, and there are many complex architectures, but I'll summarize the basic idea starting from a simple linear regression:
 
 -   In a linear regression equation, the **inputs** are the features. These inputs are multiplied with their respective **weights** (coefficients) and summed up, along with a **bias** (intercept) value. This gives us the **output / prediction**.
 
--   One such linear regression equation is equivalent to **one neuron / linear unit** in a NN. A **layer** is an organization of numerous neurons / units, or other transformations.
+-   One such linear regression equation is equivalent to **one neuron / linear unit** in a neural network. A **layer** is an organization of numerous neurons / units, or another transformation that is applied to the inputs.
 
--   The inputs of a NN are equivalent to the original features, as they are fed into the network. The **output layer** is the last layer that gives the final output / prediction of the network.
+-   The inputs of a neural network are equivalent to the original features, as they are fed into the network. The **output layer** is the last layer that gives the final output / prediction of the network.
 
--   A **hidden layer** is any layer between the network inputs and the output layer. The inputs of neurons in a hidden layer consist of the outputs of the previous layer (for the first hidden layer, simply the input features). Hidden layer neurons apply their weights and bias terms to the inputs, and pass their outputs to the next layer. A NN with at least one hidden layer is a **deep NN.**
+-   A **hidden layer** is any layer between the network inputs and the output layer. The inputs of neurons in a hidden layer consist of the outputs of the previous layer (for the first hidden layer, simply the input features). Hidden layer neurons each apply their own weights and bias terms to the inputs, and pass their outputs to the next layer. In general, **deep neural networks** are those with multiple or many hidden layers.
 
-    -   We can think of a multiple linear regression model as a single neuron / linear unit with multiple inputs and one output.
+    -   We can think of a multiple linear regression model (with numerous predictors) as a single neuron / linear unit with multiple inputs.
 
-    -   When we train a simple linear regression model, we estimate a single coefficient for each feature, and one intercept term. In a NN, we estimate a weight for each input of each neuron, and a bias term for each neuron.
+    -   When we fit a linear regression model, we estimate a single coefficient for each predictor, and one intercept term. In a neural network, we estimate a weight for each input of each neuron, and a bias term for each neuron.
 
-**Activation functions** can be applied after a layer, to transform its outputs before passing them on to the next layer as inputs. Many activation function options exist, which apply different mathematical transformations.
+**Activation functions** can be applied after a layer, to apply a mathematical transformation to its outputs before passing them on to the next layer as inputs.
 
 -   With activation functions and hidden layers, the network can learn non-linear and complex relationships.
 
 -   With a binary classification problem, a sigmoid activation function is applied to the network's final, single output, which will transform it from a predicted logit to a probability value between 0 and 1.
 
-Of course, this is the simplest summary of a typical NN. [Here](https://d2l.ai/index.html) is an excellent source for more information on many aspects of deep NNs.
+Of course, this is the simplest summary of a basic neural network. [Here](https://d2l.ai/index.html) is an excellent source for more information on many aspects of deep learning.
 
 #### Defining PyTorch & Lightning classes
 
@@ -1762,9 +1764,11 @@ The model architecture above consists of at least one hidden layer, and it is po
 
 -   Each hidden layer will be followed by a **SELU** activation function layer. This stands for "scaled exponential linear unit". The SELU activation will enable us to model non-linear relationships, while also enforcing a self-normalizing property on the layer outputs (see [original paper](https://arxiv.org/abs/1706.02515)).
 
-    -   Neural networks can be prone to numerical instability issues, so it's a common approach to apply forms of scaling / normalization **inside the network**, to the outputs of layers, before passing them on to the next layer (the scaling / normalization we apply to our features in preprocessing can also be applied as the first layer of a network).
+    -   Neural networks can be prone to numerical instability issues, so it's a common approach to apply forms of scaling / normalization **inside the network**, to the outputs of layers, before passing them on to the next layer.
 
-    -   The most common method for in-network normalization is adding **batch normalization layers**, but apparently it can conflict with the application of **dropout layers**.
+    -   The most common method for in-network normalization is adding **batch normalization layers**, but apparently it can conflict with the application of **dropout layers** (see a detailed discussion related to [this](https://stackoverflow.com/questions/39691902/ordering-of-batch-normalization-and-dropout)).
+
+    -   The scaling / normalization we apply to our features in preprocessing can also be applied as the first layer of a network.
 
 -   The SELU activation after each hidden layer will be followed by a **dropout layer**.
 
@@ -1774,7 +1778,7 @@ The model architecture above consists of at least one hidden layer, and it is po
 
     -   We will use **alpha dropout,** which is applied after SELU activation, and maintains the self-normalizing property of SELU outputs.
 
-    -   The probability of dropping each layer input is another hyperparameter we will tune, as `dropout`. Obviously, a higher probability will result in more severe regularization and possible underfitting.
+    -   The probability of dropping each input is another hyperparameter we will tune, as `dropout`. Obviously, a higher probability will result in more severe regularization and possible underfitting.
 
 Our training loss function is going to be **focal loss,** which was developed for highly imbalanced classification problems in image recognition (see [original paper](https://arxiv.org/abs/1708.02002)). This loss function discounts the errors made for "easily classified" training examples, focusing the model's attention on difficult training examples.
 
@@ -1810,7 +1814,7 @@ The learning rate scheduler will dynamically adjust the learning rate, to ensure
 
 -   We'll try a more sophisticated approach: A **cyclic LR scheduler** will cycle the LR from a `base_lr` value to a `max_lr` value, then back down to the `base_lr`, in a certain number of training steps. After each cycle, the `max_lr` will be reduced in an exponential fashion. We'll tune only the `base_lr` as our hyperparameter `learning_rate`, but it's possible to tune other parameters of the cyclic scheduler.
 
--   The rationale behind this approach is that a higher LR rate may appear to harm the training process initially, but yield better results later on. By cycling the LR in this fashion, we still decrease the "average" LR over time, while avoiding getting stuck in locally optimal solutions by occasionally using higher LR values (more on this in the [original paper](https://arxiv.org/abs/1506.01186?ref=jeremyjordan.me), and a good [summary article](https://www.jeremyjordan.me/nn-learning-rate/)).
+-   The rationale behind this approach is that a higher LR rate may appear to harm the training process initially, but yield better results later on. By cycling the LR in this fashion, we still decrease the "average" LR over time, while periodically increasing the LR to avoid getting stuck in locally optimal solutions (more on this in the [original paper](https://arxiv.org/abs/1506.01186?ref=jeremyjordan.me), and a good [summary article](https://www.jeremyjordan.me/nn-learning-rate/)).
 
 The last Lightning class we need to create is simply an exact copy of the existing Optuna pruner callback, due to compatibility issues (similar issues were discussed [here](https://stackoverflow.com/questions/69526806/pytorch-model-heplers-py-in-is-overridden-raise-valueerror-expected-a-paren) and [here](https://github.com/ray-project/ray/issues/33426)).
 
@@ -1828,6 +1832,28 @@ class OptunaPruning(PyTorchLightningPruningCallback, pl.Callback):
 ```
 
 #### Hyperparameter tuning
+
+Now, we define our validation function for the neural network model. There are a few more PyTorch and Lightning functions & classes we will use to load our data & validate our models.
+
+-   We create two `DataLoader` instances in the loop, one each for our training & validation data. The dataloader creates minibatches with the data according to the `batch_size` parameter, and serves these batches to the model for training, validation & prediction.
+
+    -   Batch size mainly affects the training speed, though it could affect the model performance as well (for example, smaller batch sizes could result in noisier model updates). Generally, it's suggested to use the largest batch size possible with the available memory.
+
+    -   The training data is shuffled for batching, but not the validation or prediction data.
+
+    -   The validation & prediction steps could also be carried out without batching if the available memory is enough.
+
+    -   The `num_workers` argument controls the number of parallel processes used by the dataloader. I've often had issues with this parameter, so I did not use parallelization.
+
+-   We create an early stopping callback, a pruning callback for Optuna trials, and a checkpointing callback that saves the best and last epoch of each trained model to the project directory.
+
+    -   The checkpointing is disabled for Optuna trials. We'll use it for epoch validation, as the checkpoint callback stores the path to the best epoch saved, and the filename includes the epoch number. This can also be viewed directly from the checkpoint file in the `lightning_logs` folder.
+
+-   Finally, we create the `Trainer`. The trainer takes the model, dataloaders, callbacks and additional parameters, and performs training, testing and prediction.
+
+    -   We set parameters such as a high number of maximum training epochs (as early stopping is active), GPU training options, and logging / checkpointing / model summary options.
+
+    -   With GPU training and no parallelization on the dataloaders, the Optuna study of 500 trials took roughly 4 hours on my machine.
 
 ```{python ValNN}
 #| code-fold: true
@@ -1930,6 +1956,16 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
     return best_epochs
 ```
 
+Our tuning objective function is similar to the one for XGBoost.
+
+-   We'll try networks with 1 to 5 hidden layers. I'd expect 1 or 2 hidden layers to be enough for this problem, but in previous iterations, 3-4 hidden layers performed close to optimal as well.
+
+-   We won't sample a hidden size value directly, but we'll sample an exponent for the number 2, yielding a hidden size from 2 to 64. All layers will have the same size.
+
+-   The default learning rate for the Adam algorithm is 1e-3. We'll tune from a broad range around that, as learning rate scheduling is in place.
+
+-   The focal loss parameter `alpha` takes a value from 0 to 1, which will be our search space. A `gamma` value of 2 is suggested as a good setting by the authors of the [original paper](https://arxiv.org/abs/1708.02002), so we'll tune from a range around that.
+
 ```{python ObjNN}
 #| eval: false
 
@@ -1984,6 +2020,22 @@ best_trial_nn = pd.read_csv("./ModifiedData/trials_nn.csv").iloc[0,]
 best_trial_nn
 ```
 
+The best tune has 2 hidden layers, each with a size of 16.
+
+-   This could mean our feature space is fairly non-linear, but also on the smaller side, as the hidden layer size is much smaller compared to the number of input features.
+
+    -   This effectively results in a reduction of the feature space, which was also done by XGBoost in its own way.
+
+-   Small amounts of L2 and dropout regularization are applied, but the lower bounds of the search spaces are not reached, so we should be close to the optimal values.
+
+-   The base learning rate is considerably higher compared to the default of 0.001.
+
+-   An `alpha` of roughly 0.2 means our focal loss function puts a bit more weight on the positive cases, and a `gamma` higher than 2 means "easy" training examples are considerably discounted from the loss calculation.
+
+    -   A heuristic suggested by the authors of the [original paper](https://arxiv.org/abs/1708.02002) was `alpha = 0.25` and `gamma = 2`. Our tune is not far from that.
+
+The median best number of epochs for this parameter set was 9, which will be set later, in the `Trainer` for our final model. For now, we only create our final model instance with the best hyperparameters.
+
 ```{python FinalModelNN}
 
 # Define NN model with best parameters (n. epochs is determined later in Trainer)
@@ -2002,7 +2054,11 @@ model_nn = SeluDropoutModel(hyperparams_dict)
 
 ## Model testing
 
+Finally, we'll train the final versions of our models on the full training data, and test their performance on the testing data.
+
 ### Training & prediction with final models
+
+The steps for retrieving the final predictions are mostly explained in the code comments below.
 
 ```{python ClassWeights}
 
@@ -2012,6 +2068,8 @@ class_weight = compute_class_weight("balanced", classes = classes, y = y_train)
 sample_weight_train = np.where(y_train == 1, class_weight[1], class_weight[0])
 sample_weight_test = np.where(y_test == 1, class_weight[1], class_weight[0])
 ```
+
+We'll use a dummy classifier as our baseline to compare with. It will always give the target class ratios in the training data as the probability predictions.
 
 ```{python ModelDict}
 
@@ -2027,6 +2085,8 @@ models_dict = {
   "Neural net": model_nn
 }
 ```
+
+We build, train & retrieve positive class prediction probabilities for every model in a loop.
 
 ```{python TrainPredict}
 #| code-fold: true
@@ -2100,40 +2160,34 @@ for key in models_dict.keys():
 
 ### Calculating performance metrics
 
-```{python StaticMetrics}
-#| code-fold: true
-#| code-summary: "Show static metric calculations"
+The first set of metrics we'll calculate are all dependent on the threshold probability: **Precision, recall** and **F1 score.**
 
+-   The **threshold probability** is the minimum positive class probability required to classify an observation as positive. Numerous classification metrics take changing values depending on the threshold used to calculate them.
 
-# Retrieve AP & Brier scores (weighted) for each model
-scores_avg_precision = {}
-scores_brier = {}
+-   For binary classification, a default threshold of 0.5 is often assumed, but it's important to use the ideal threshold depending on the problem, especially with a major class imbalance.
 
-for key in preds_dict.keys():
+-   **Precision** refers to the fraction of positive class predictions that were correct (true positives / true positives + false positives).
 
-  # Retrieve average precision scores
-  avg_precision = average_precision_score(y_test, preds_dict[key])
-  scores_avg_precision[key] = avg_precision
-  
-  # Retrieve Brier scores
-  brier_score = brier_score_loss(
-    y_test, preds_dict[key], sample_weight = sample_weight_test)
-  scores_brier[key] = brier_score
-  
- 
-# Retrieve Brier skill scores for each model, with dummy classifier as reference
-scores_brier_skill = {}
+-   **Recall** refers to the fraction of positive cases correctly found, out of all positive cases in the data (true positives / (true positives + false positives).
 
-for key in preds_dict.keys():
-  
-  brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
-  scores_brier_skill[key] = brier_skill
-```
+-   There is a natural tradeoff between precision and recall:
+
+    -   A higher threshold probability naturally means fewer cases are classified as positive. This generally results in higher precision and lower recall.
+
+    -   A lower threshold probability naturally means more cases are classified as positive. This generally results in higher recall and lower precision.
+
+-   The **F1 score** is the harmonic mean of precision and recall at a given threshold probability. It aims to summarize both metrics at a given threshold. By default, precision and recall are weighted equally, but it's possible to calculate differently weighted versions.
+
+-   We'll calculate precision, recall and F1 score at various threshold probabilities, for each model. We'll retrieve the "optimal" threshold probability that maximizes F1 score, and the precision & recall values at this point.
+
+    -   We will plot all three scores against the threshold probability to visualize the relationship between them.
+    -   In a real-life application, we'd use this plot to choose a threshold probability depending on the nature of our problem, and the importance of each metric.
+
+-   We won't consider plain **accuracy**, as it can be very misleading with a large class imbalance. To give an extreme example, simply predicting the negative class all the time will give us an accuracy of roughly 88%, as that is the ratio of negative cases in our data.
 
 ```{python DynamicMetrics}
 #| code-fold: true
 #| code-summary: "Show dynamic metric calculations"
-
 
 # Retrieve F1 scores at different threshold probabilities for each model
 scores_f1 = {}
@@ -2169,7 +2223,53 @@ for key in preds_dict.keys():
   threshold_probs_best[key] = thresholds[np.argmax(f1_scores)]
 ```
 
+Next, we will calculate a few metrics not dependent on the threshold probability, as a "summary" of overall model performance.
+
+-   **Average precision** is also known as the PRAUC: The area under the precision-recall curve. It takes a value between 0 and 1, higher being better. We'll explain and discuss this metric later with the precision-recall curve plot.
+
+-   **Brier score** is a probability scoring metric that compares predicted probabilities with actual class labels. Similar to log loss, a lower value is better. Unlike log loss, it takes a value between 0 and 1.
+
+    -   We'll use the class weighted version as we did with our training loss metrics. The scores will be misleading without class weights due to the imbalance, as they will be dominated by the scores for the majority class.
+
+    -   It's always a good idea to assess the probability predictions themselves, rather than just class predictions. They may be more important and useful than class predictions in many cases (weather forecasts, risk assessments, medical tests).
+
+        -   Intuitively, it also makes sense to aim for the best probability predictions regardless of the threshold probability, as they are the raw output of our models. This is why we trained & validated our models with loss metrics.
+
+-   The **Brier skill score** compares the Brier score of a classifier with another baseline Brier score. This time, a higher score means a bigger improvement over the baseline. We'll calculate this with our dummy classifier as the baseline.
+
+```{python StaticMetrics}
+#| code-fold: true
+#| code-summary: "Show static metric calculations"
+
+
+# Retrieve AP & Brier scores (weighted) for each model
+scores_avg_precision = {}
+scores_brier = {}
+
+for key in preds_dict.keys():
+
+  # Retrieve average precision scores
+  avg_precision = average_precision_score(y_test, preds_dict[key])
+  scores_avg_precision[key] = avg_precision
+  
+  # Retrieve Brier scores
+  brier_score = brier_score_loss(
+    y_test, preds_dict[key], sample_weight = sample_weight_test)
+  scores_brier[key] = brier_score
+  
+ 
+# Retrieve Brier skill scores for each model, with dummy classifier as reference
+scores_brier_skill = {}
+
+for key in preds_dict.keys():
+  
+  brier_skill = 1 - (scores_brier[key] / scores_brier["Dummy"])
+  scores_brier_skill[key] = brier_skill
+```
+
 ### Summary table of performance metrics
+
+Now, let's start reviewing our metrics. First, we start with a summary table.
 
 ```{python GetSummaryData}
 #| code-fold: true
@@ -2190,7 +2290,23 @@ df_scores = pd.DataFrame(
 print(df_scores)
 ```
 
+All models are a huge improvement over the baseline classifier. XGBoost seems to perform the best overall, in almost all summary metrics.
+
+-   The NN model follows XGBoost in average precision, and has the highest recall at the "optimal" threshold, but also the worst Brier scores.
+
+    -   We calculated Brier scores by fully balancing the contributions of each class with class weights. All models except the NN were trained in the same fashion, but the NN was trained with less weight on the positive class.
+
+    -   This results in a "worse" weighted Brier score for the NN, but it would likely have the best unweighted Brier score as well. Which score is more important for assessing performance is dependent on the use case.
+
+    -   We also see the "optimal" threshold is much lower for the NN model than for the class weighted models. We'll talk about this in more detail with the predicted probabilities plot.
+
+-   The logistic regression model comes next in average precision, and beats the NN model in Brier, F1 and "optimal" precision scores. It's likely a very efficient alternative to the XGBoost and NN models.
+
+-   The SVM model performs considerably worse than the other models, and this could have several reasons. The kernel approximation we performed may not be well suited to this feature set. The approximated probability predictions may not be very reliable. Still, it's likely an effective model on its own.
+
 ### Precision - recall curves
+
+We can visualize the tradeoff between precision and recall with the precision-recall curve (PRC) plot.
 
 ```{python PlotPRCCurves}
 #| code-fold: true
@@ -2206,7 +2322,17 @@ plt.show()
 plt.close("all")
 ```
 
+In the plot above, each curve starts with a threshold probability of 1, and ends with a threshold probability of 0. As a consequence, precision drops and recall increases as we move to the right.
+
+-   A very skilled classifier would lose very little precision as it increases recall. The curve would be very close to the top right corner.
+
+-   Calculating the **area under the precision-recall curve (PRAUC)** summarizes this tradeoff, and the overall model performance at all thresholds. This is equivalent to the **average precision** metric we previously calculated.
+
+-   We see the XGBoost model has the best PRC curve at pretty much any threshold probability. The NN model outperforms the logistic model at lower thresholds, and the logistic model outperforms the NN model at higher thresholds.
+
 ### F1 score - precision - recall plots
+
+Another way to look at the tradeoff between precision and recall is to plot both, along with the F1 scores, across various threshold probabilities.
 
 ```{python GetF1Dataframes}
 #| code-fold: true
@@ -2311,7 +2437,19 @@ plt.show()
 plt.close("all")
 ```
 
+We see a major difference between the class weighted models, and the NN model trained with focal loss.
+
+-   The class weighted models reach their maximum F1 score around a threshold probability of 0.6 - 0.65. Recall declines and precision increases mainly after 0.3.
+
+-   In contrast, the NN model reaches its maximum F1 score around a threshold probability of 0.18 - 0.19. Recall sharply declines and precision sharply increases after around 0.12 - 0.13.
+
+-   This suggests the class weighted models ascribe much higher positive class probabilities to predictions compared to the NN model. We'll see this clearly in the next plot.
+
+-   The plot above can be used in real-life applications to see how each score changes with the threshold, and to choose an ideal threshold depending on which score is more important for the problem at hand.
+
 ### Predicted probability distributions
+
+Let's look at the distributions of positive class probabilities predicted by our models to better see the difference between the class weighted models and the focal loss NN model.
 
 ```{python GetProbDistDataframes}
 #| code-fold: true
@@ -2399,6 +2537,42 @@ _ = ax[3].set_ylabel("N. of times predicted")
 plt.show()
 plt.close("all")
 ```
+
+In the plot above, we have a stacked histogram of predicted positive class probabilities, colored by their actual target values.
+
+-   A very skilled classifier would separate the probability predictions of the two classes as much as possible:
+
+    -   The predicted probabilities for negative cases (blue bins) would be mostly gathered to the left, close to 0.
+
+    -   The predicted probabilities for positive cases (orange bins) would be mostly gathered to the right, close to 1.
+
+-   The class weighted models predict relatively higher positive class probabilities for all cases, including the negatives.
+
+    -   The probabilities for the negative cases are close to normally distributed, with a median around 0.35 - 0.4.
+
+    -   The probabilities for the positive cases are generally higher, but more uniformly distributed. Many are higher than 0.8, but many are also between 0.2 - 0.6, and overlap with many negative cases.
+
+    -   This suggests the models can easily classify the most extreme positive cases, but also have trouble telling apart less obvious positives from negative cases. This is usually difficult with a large class imbalance.
+
+    -   Due to being trained with class weights, the models are "tuned" to predict relatively high positive probabilities overall. This is why their "optimal" threshold probabilities are much higher.
+
+-   The probability predictions of the NN model are distributed quite differently. The vast majority of cases have very low positive class probabilities, mostly below 0.2.
+
+    -   The probabilities for the negative cases are roughly close to normally distributed, around maybe 0.16 - 0.17.
+
+    -   Almost the same distribution shape applies to the positive cases, but with a very long right tail. There are "outlier" positive cases with predicted probabilities much higher than 0.2. These are likely the most extreme positive cases.
+
+    -   This explains why the "optimal" threshold probability is much lower: The NN model, trained with focal loss, puts less weight on the positive cases, and predicts lower positive probabilities across the board, compared to the class weighted models' predictions.
+
+-   Both types of probability predictions likely have their pros and cons, and the best approach depends on the use case.
+
+    -   The probabilities predicted by the class weighted models could be considered "unrealistic", as they are tuned to be relatively high across the board.
+
+        -   For this problem, it may be unlikely most cars actually have a moderately high probability of being kicks. On the other hand, the XGBoost model clearly performs the best overall in terms of classification performance.
+
+    -    In contrast, the probabilities predicted by the focal loss NN model could be considered more realistic, as they are low for the vast majority of cases, and quite high for a small number of cases.
+
+        -   Intuitively, we'd expect most cars to have a smaller chance of being kicks, with a few high-risk ones. The NN model also seems to "separate" the riskiest cars from the rest to a higher degree.
 
 ## Sensitivity analysis
 
