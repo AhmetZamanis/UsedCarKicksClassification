@@ -465,7 +465,7 @@ df.loc[df["Make"] == "TOYOTA SCION", "Make"] = "SCION"
     HUMMER              1
     Name: count, dtype: int64
 
-The “Model” column records the car model. There are more than 1000+
+The “Model” column records the car model. There are more than 1000
 models, so if we want to use this column as a feature, we’ll likely use
 target encoding. More on this in the feature engineering & preprocessing
 sections.
@@ -659,6 +659,8 @@ print(df["WheelType"].value_counts())
     Name: count, dtype: int64
 
 
+
+
     WheelType
     Alloy      36050
     Covers     33004
@@ -670,14 +672,17 @@ print("N. of WheelTypeID NAs that are also WheelType NAs: " +
       str(pd.isnull(df.loc[pd.isnull(df["WheelTypeID"]), "WheelType"]).sum())
       )
 
-print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: " +
+print("\nRemaining 5 rows with WheelType NAs are WheelTypeID = 0: \n" +
       str(df.loc[df["WheelTypeID"] == "0", "WheelType"])
       )
 ```
 
     N. of WheelTypeID NAs that are also WheelType NAs: 3169
 
-    Remaining 5 rows with WheelType NAs are WheelTypeID = 0: 2992     NaN
+
+
+    Remaining 5 rows with WheelType NAs are WheelTypeID = 0: 
+    2992     NaN
     3926     NaN
     42640    NaN
     47731    NaN
@@ -761,7 +766,7 @@ df["Size"].value_counts()
 print("Rows with Size values missing: ")
 print(df.loc[pd.isnull(df["Size"]), ["VehYear", "Make", "Model"]])
 
-print("\nSize values of other rows with same model: ")
+print("\nSize values of other rows with the same models: ")
 print(
   df.loc[df["Model"].str.contains("SIERRA"), "Size"].iloc[0] + "\n" +
   df.loc[df["Model"].str.contains("NITRO 4WD"), "Size"].iloc[0] + "\n" +
@@ -781,7 +786,7 @@ df.loc[pd.isnull(df["Size"]), "Size"] = size_nas
     69948 2008.0000     JEEP       PATRIOT 2WD 4C
     69958 2008.0000     JEEP       PATRIOT 2WD 4C
 
-    Size values of other rows with same model: 
+    Size values of other rows with the same models: 
 
     LARGE TRUCK
     MEDIUM SUV
@@ -1662,8 +1667,8 @@ and validates the performance of the parameter set.
   trains the SGDClassifier for only one epoch. We’ll call the method
   repeatedly to train the model for several epochs. Our function will
   handle early stopping manually by recording each epoch’s score. By
-  default, 10 epochs with less than 0.0001 improvement in the validation
-  error will terminate the model training.
+  default, 10 consecutive epochs with less than 0.0001 improvement in
+  the validation error will terminate the model training.
 
   - **Class weights** will be applied to both training and validation
     error calculations: The errors for the minority class will be
@@ -1947,7 +1952,7 @@ edition of this report were tuned with 500 or 1000 trials.
   and 12 CPU cores available.
 
 ``` python
-# Optimize Optuna
+# Perform Optuna study
 study_logistic.optimize(
   objective_logistic, 
   n_trials = 500,
@@ -2046,7 +2051,7 @@ with decision boundaries drawn in the feature space.
 
 - Normally, the decision boundaries are linear, but non-linear
   transformations can be applied to the feature space to model
-  non-linear decision boundaries.
+  non-linear relationships.
 
   - There are numerous **kernel functions** that can be used to
     transform a feature space. The best choice will depend on the nature
@@ -2399,12 +2404,12 @@ model is a combination of all models.
     the feature set, the **feature importance scores** that can be
     extracted from tree-based models can be misleading. These only look
     at the relevancy between the target and the features, without taking
-    their redundancy with one another into account (for more on this,
-    see [this
+    their redundancy with one another into account (for more relevancy,
+    redundancy & feature selection, see [this
     article](https://towardsdatascience.com/mrmr-explained-exactly-how-you-wished-someone-explained-to-you-9cf4ed27458b).).
 
-While there are many more hyperparameters to tune for XGBoost, the code
-is simpler.
+While there are a lot of hyperparameters to tune for XGBoost, the code
+is simpler compared to SGDClassifier.
 
 - We can simply pass a validation set while training an XGBoost model,
   which automatically handles early stopping, records the best
@@ -2412,7 +2417,7 @@ is simpler.
 
 - **Callbacks** are objects that monitor model training and perform a
   certain action based on a condition, most commonly early stopping.
-  Optuna includes a special pruning callback integration for XGBoost, so
+  Optuna offers a special pruning callback integration for XGBoost, so
   we don’t have to manually report scores to the Optuna study.
 
 - XGBoost supports GPU training, which will save us some training time.
@@ -2617,7 +2622,7 @@ The optimal set of hyperparameters yields trees on the shallow side,
 with some regularization. Most interesting is the `colsample_bytree`
 parameter: A value of roughly 0.42 means each tree is built with a
 subsample of 42% of the features in our data, amounting to roughly 37-38
-features. More evidence that we have quite a bit of redundant (or simply
+features. More evidence that we may have many redundant (or simply
 useless) features in our dataset.
 
 ``` python
@@ -2626,7 +2631,7 @@ pipe_xgb = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
   ("XGBoost", XGBClassifier( # Model step
       objective = "binary:logistic",
-      n_estimators = 20, # Best number of epochs from validation
+      n_estimators = 20, # Best number of rounds from validation
       eval_metric = "logloss",
       tree_method = "gpu_hist",
       gpu_id = 0,
@@ -2650,7 +2655,7 @@ pipe_xgb = Pipeline(steps = [
 
 Our final model is a neural network. There is much to explain about how
 neural networks work, and there are many complex architectures, but I’ll
-summarize the basic idea starting from a simple linear regression:
+summarize the basic idea by comparing with a linear regression:
 
 - In a linear regression equation, the **inputs** are the features.
   These inputs are multiplied with their respective **weights**
@@ -2948,8 +2953,8 @@ it is possible to add more hidden layers depending on the
   the network, as our loss function applies sigmoid activation before
   calculating the loss.
 
-- Each hidden layer will be followed by a **SELU** activation function
-  layer. This stands for “scaled exponential linear unit”. The SELU
+- Each hidden layer will be followed by a **SELU activation function**
+  layer. This stands for **“scaled exponential linear unit”**. The SELU
   activation will enable us to model non-linear relationships, while
   also enforcing a self-normalizing property on the layer outputs (see
   [original paper](https://arxiv.org/abs/1706.02515)).
@@ -2960,10 +2965,10 @@ it is possible to add more hidden layers depending on the
     them on to the next layer.
 
   - The most common method for in-network normalization is adding
-    **batch normalization layers**, but apparently it can conflict with
-    the application of **dropout layers** (see a detailed discussion
-    related to
-    [this](https://stackoverflow.com/questions/39691902/ordering-of-batch-normalization-and-dropout)).
+    **batch normalization layers**, but apparently it can interact with
+    the application of **dropout layers** (see a detailed
+    [discussion](https://stackoverflow.com/questions/39691902/ordering-of-batch-normalization-and-dropout)
+    related to this).
 
   - The scaling / normalization we apply to our features in
     preprocessing can also be applied as the first layer of a network.
@@ -3015,15 +3020,17 @@ Previously, we used the same loss function both to train our models, and
 to score their performance on validation data.
 
 - In general, we want to train & tune models with a loss function that
-  scores probability predictions (more on this in model testing).
+  scores the probability predictions directly, instead of the class
+  predictions (more on this in model testing).
 
 - However, when we tune the parameters of focal loss, our loss function
   becomes part of the optimization problem (just like the class weights
   we applied to the loss function for the previous models). If we use
   focal loss also as our validation metric, this will be a form of
-  leakage: We’ll simply get the focal loss parameters that minimize
-  focal loss by changing the metric itself (moving the goalposts in a
-  sense), not necessarily those that maximize model performance.
+  leakage: We’ll simply search for the focal loss parameters that
+  minimize focal loss by changing the metric itself (moving the
+  goalposts in a sense), not necessarily those that maximize model
+  performance.
 
 - Therefore, for validating our NN hyperparameters’ performance, we will
   use the **average precision** performance metric (which will be
@@ -3069,8 +3076,9 @@ and the risk of overfitting & erratic training steps.
 - The rationale behind this approach is that a higher LR rate may appear
   to harm the training process initially, but yield better results later
   on. By cycling the LR in this fashion, we still decrease the “average”
-  LR over time, while periodically increasing the LR to avoid getting
-  stuck in locally optimal solutions (more on this in the [original
+  LR in the long term, while periodically increasing the LR in the short
+  term, to avoid getting stuck in locally optimal solutions (more on
+  this in the [original
   paper](https://arxiv.org/abs/1506.01186?ref=jeremyjordan.me), and a
   good [summary
   article](https://www.jeremyjordan.me/nn-learning-rate/)).
@@ -3132,8 +3140,8 @@ use to load our data & validate our models.
     `lightning_logs` folder.
 
 - Finally, we create the `Trainer`. The trainer takes the model,
-  dataloaders, callbacks and additional parameters, and performs
-  training, testing and prediction.
+  dataloaders, callbacks and additional settings, and performs training,
+  testing and prediction.
 
   - We set parameters such as a high number of maximum training epochs
     (as early stopping is active), GPU training options, and logging /
@@ -3250,8 +3258,8 @@ Our tuning objective function is similar to the one for XGBoost.
   hidden layers performed close to optimal as well.
 
 - We won’t sample a hidden size value directly, but we’ll sample an
-  exponent for the number 2, yielding a hidden size from 2 to 64. All
-  layers will have the same size.
+  exponent for the base of 2, yielding a hidden size in powers of 2,
+  from 2 to 64. All hidden layers will have the same size.
 
 - The default learning rate for the Adam algorithm is 1e-3. We’ll tune
   from a broad range around that, as learning rate scheduling is in
@@ -3330,7 +3338,7 @@ best_trial_nn
     state                                                PRUNED
     Name: 0, dtype: object
 
-The best tune has 2 hidden layers, each with a size of 16.
+The best tune has 2 hidden layers, each with a size of 16 ($2^4$).
 
 - This could mean our feature space is fairly non-linear, but also on
   the smaller side, as the hidden layer size is much smaller compared to
@@ -3376,8 +3384,8 @@ model_nn = SeluDropoutModel(hyperparams_dict)
 
 ## Model testing
 
-Finally, we’ll train the final versions of our models on the full
-training data, and test their performance on the testing data.
+Now, we’ll train the final versions of our models on the full training
+data, and test their performance on the testing data.
 
 ### Training & prediction with final models
 
@@ -3502,7 +3510,7 @@ threshold probability: **Precision, recall** and **F1 score.**
 
 - **Recall** refers to the fraction of positive cases correctly found,
   out of all positive cases in the data (true positives / (true
-  positives + false positives).
+  positives + false negatives).
 
 - There is a natural tradeoff between precision and recall:
 
@@ -3524,11 +3532,8 @@ threshold probability: **Precision, recall** and **F1 score.**
   probability that maximizes F1 score, and the precision & recall values
   at this point.
 
-  - We will plot all three scores against the threshold probability to
+  - We will plot all three scores against the threshold probabilities to
     visualize the relationship between them.
-  - In a real-life application, we’d use this plot to choose a threshold
-    probability depending on the nature of our problem, and the
-    importance of each metric.
 
 - We won’t consider plain **accuracy**, as it can be very misleading
   with a large class imbalance. To give an extreme example, simply
@@ -3751,8 +3756,7 @@ and ends with a threshold probability of 0. As a consequence, precision
 drops and recall increases as we move to the right.
 
 - A very skilled classifier would lose very little precision as it
-  increases recall. The curve would be very close to the top right
-  corner.
+  increases recall. The curve would be closer to the top right corner.
 
 - Calculating the **area under the precision-recall curve (PRAUC)**
   summarizes this tradeoff, and the overall model performance at all
@@ -4010,7 +4014,12 @@ class probabilities, colored by their actual target values.
   probabilities for all cases, including the negatives.
 
   - The probabilities for the negative cases are close to normally
-    distributed, with a median around 0.35 - 0.4.
+    distributed, roughly centered around 0.35 - 0.4.
+
+    - The approximated probabilities for the SVM model are not smoothly
+      distributed because of the isotonic approximation we used. Using
+      the sigmoid method results in similar, normal-shaped
+      distributions, just like the logistic and XGBoost predictions.
 
   - The probabilities for the positive cases are generally higher, but
     more uniformly distributed. Many are higher than 0.8, but many are
@@ -4018,8 +4027,7 @@ class probabilities, colored by their actual target values.
 
   - This suggests the models can easily classify the most extreme
     positive cases, but also have trouble telling apart less obvious
-    positives from negative cases. This is usually difficult with a
-    large class imbalance.
+    positives from negative cases.
 
   - Due to being trained with class weights, the models are “tuned” to
     predict relatively high positive probabilities overall. This is why
@@ -4049,33 +4057,33 @@ class probabilities, colored by their actual target values.
     considered “unrealistic”, as they are tuned to be relatively high
     across the board.
 
-    - For this problem, it may be unlikely most cars actually have a
-      moderately high probability of being kicks. On the other hand, the
-      XGBoost model clearly performs the best overall in terms of
-      classification performance.
+    - For this problem, it’s unlikely most cars have a moderately high
+      risk of being kicks. On the other hand, the XGBoost model clearly
+      performs the best overall in terms of classification performance.
 
   - In contrast, the probabilities predicted by the focal loss NN model
     could be considered more realistic, as they are low for the vast
-    majority of cases, and quite high for a small number of cases.
+    majority of cases, and relatively much higher for a small number of
+    cases.
 
-  <!-- -->
-
-      -   Intuitively, we'd expect most cars to have a smaller chance of being kicks, with a few high-risk ones. The NN model also seems to "separate" the riskiest cars from the rest to a higher degree.
+    - Intuitively, we’d expect most cars to have a smaller risk of being
+      kicks, with a few high-risk ones. The NN model also seems to
+      “separate” the riskiest cars from the rest to a higher degree.
 
 ## Sensitivity analysis
 
 The classification models output probability predictions of class
-membership, and it’s up to us to decide how to use these probabilities
-for our real-life problem. We’ll illustrate this with a simple
-hypothetical business case.
+membership, and it’s up to us to use these probabilities for our
+real-life problem. We’ll illustrate this with a simple hypothetical
+business case.
 
 ### Problem formulation
 
 In our scenario, we evaluate which cars to purchase from our testing
 data, based on their predicted probabilities of being kicks.
 
-- We’ll assume we make some profit from purchasing good cars, and incur
-  a certain loss from purchasing kicks.
+- We’ll assume we make a profit from purchasing good cars, and incur a
+  certain loss from purchasing kicks.
 
 - We’ll aim to maximize our **equity** $E$ by changing two variables:
   The $N$ **number of cars** we intend to purchase, and the $t$
@@ -4107,9 +4115,9 @@ following expressions:
 >
 > $k_i = 0$ for good cars, $k_i = 1$ for kicks,
 >
-> $d_i = 0$ if $p_i < t$,
+> $d_i = 1$ if $p_i < t$,
 >
-> $d_i = 1$ if $p_i \ge t$.
+> $d_i = 0$ if $p_i \ge t$.
 
 I originally wanted to treat this as a linear programming problem, and
 solve for the optimal number of cars to buy, and the optimal threshold
@@ -4118,28 +4126,26 @@ research, I realized this is more complex than I originally expected, as
 we have conditional constraints in this problem.
 
 Instead, we’ll perform a **sensitivity analysis,** by calculating the
-equity at various combinations of the number of cars to buy and the
-threshold probability, for each model. This will still give us
-quasi-optimal solutions for our problem, which shouldn’t be too far from
-the actual optimal value.
+equity at various combinations of our two decision variables, for each
+model. This will still give us quasi-optimal solutions for our problem,
+which shouldn’t be too far from the actual optimal values.
 
 ### Calculations
 
 The code to perform the necessary calculations is available below,
 explained by the code comments. We will try 100 values for the number of
-cars to buy, and 100 values for the threshold probability. We’ll
-calculate an equity value for each combination, for each model’s
-predictions. With more than 14k observations in our testing set, this
-takes several minutes on my machine. There could be a way to program
-this better.
+cars to buy, from 1 to 14k+, and 100 values for the threshold
+probability, from 0 to 1. We’ll calculate an equity value for each
+combination, using each model’s predictions. With 10k calculations for
+each model, this takes several minutes on my machine. There could be a
+way to program this better.
 
 <details>
 <summary>Show code to get sensitivity analysis input
 dataframes</summary>
 
 ``` python
-# Retrieve prob. predictions, target labels, purchase prices in dataframes, sort in
-# descending order according to prob. predictions
+# Retrieve prob. predictions, target labels, purchase prices in dataframes, sort in descending order according to prob. predictions
 
 # Dummy
 df_dummy = pd.DataFrame({
@@ -4187,8 +4193,7 @@ df_nn = df_nn.sort_values("ProbKick", ascending = True)
 <summary>Show code to define profit-loss calculation function</summary>
 
 ``` python
-# Define function to calculate profit-loss, given threshold probability, number of
-# cars to purchase and probability predictions
+# Define function to calculate profit-loss, given threshold probability, number of cars to purchase and probability predictions
 def calc_profit(threshold, num_purchases, df_probs):
   
   # Retrieve arrays of prices, labels, predicted probs
@@ -4345,7 +4350,7 @@ plt.close("all")
 
 ![](Report_files/figure-commonmark/cell-90-output-1.png)
 
-We see very similar, steady curves for the class weighted models.
+We see very similar, smooth curves for the class weighted models.
 
 - The highest profits are reached at around 0.5 threshold probability,
   with 9.5k-10k cars purchased out of more than 14k.
@@ -4356,16 +4361,16 @@ We see very similar, steady curves for the class weighted models.
 In contrast, the curves for the NN model, trained with focal loss, are
 much more different.
 
-- Profits sharply rise to their highest values around 0.2 threshold
-  probability, with 9.5k-10k cars purchased. They also decline sharply
-  afterwards.
+- Profits sharply rise to their highest values around 0.17 threshold
+  probability, also with 9.5k-10k cars purchased. They also decline
+  sharply afterwards.
 
 The most profitable model overall is XGBoost, though the NN and logistic
 regression come close. SVM trails behind considerably.
 
 - The NN and logistic models reach a slightly higher profit value at
-  some sub-optimal values for number of cars purchased. So they could
-  still be preferred to XGBoost in case our number of purchases are
+  some sub-optimal numbers of cars purchased. So they could still be
+  preferred to XGBoost in some cases, when our number of purchases are
   limited.
 
 Below, we view the quasi-optimal solutions for each model as a table.
@@ -4436,10 +4441,10 @@ custom scikit-learn metric, and repeat this experiment by training the
 other models with focal loss.
 
 Finally, my main goal with this project was to practice building &
-tuning a neural network model directly using PyTorch, instead of using
-predefined architectures or wrappers. However, the final part of the
-analysis sparked my interest in linear programming and optimization
-problems. I plan to explore this topic further, as it seems
+tuning a neural network model directly using PyTorch and Lightning,
+instead of using predefined architectures or wrappers. However, the
+final part of the analysis sparked my interest in linear programming and
+optimization problems. I plan to explore this topic further, as it seems
 complementary to machine learning methods.
 
 Any comments or suggestions are welcome.
