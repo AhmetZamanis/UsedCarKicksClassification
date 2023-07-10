@@ -804,11 +804,10 @@ We can train linear classification models with SGD in scikit-learn using [SGDCla
 
     -   The class weight for each class will be inversely proportional to its class frequency, calculated automatically by a scikit-learn utility (only using the training data to avoid leakage). Using these class weights, we will create a sample weights vector for every training & validation set observation, and pass these to the model training and scoring functions respectively.
 
--   If the function is ran for an Optuna trial, it will return the average CV score of the parameter set (from the best epochs, not the last ones). It will also perform pruning if directed by the Optuna pruner:
+-   The function will return the average CV score of the parameter set, and the number of training epochs that achieved it. It will also perform pruning if directed by the Optuna pruner:
 
     -   Unpromising trials (determined according to the validation scores of the first epochs) will be stopped early by the Optuna pruner. To allow pruning, the score of each epoch for the first CV fold will be reported to the Optuna study.
-
--   If not ran for an Optuna trial, the function will return the best number of epochs for the hyperparameter set, in each CV fold. We'll use this setting to train and validate our model one last time with the best hyperparameter set, and determine the best number of epochs for the final model.
+    -   The best number of epochs is not a hyperparameter to be suggested & tuned by Optuna, but we will observe the value it takes during a trial, and report it back.
 
 The SGDClassifier is a general method for training a linear model with SGD. Its parameters determine what type of linear model is trained:
 
@@ -840,9 +839,9 @@ The SGDClassifier is a general method for training a linear model with SGD. Its 
 def validate_logistic(
   alpha, # Regularization strength hyperparameter
   l1_ratio, # Ratio of L1 regularization hyperparameter
+  trial, # Pass the Optuna trial of the parameter set
   tol = 1e-4, # Min. required change in validation score to count as improvement
-  verbose = 0, # Set to 1 to print model training progress
-  trial = None # Pass the Optuna trial if applicable
+  verbose = 0 # Set to 1 to print model training progress
   ):
   
   # Record the validation scores of the parameter set on each CV fold
@@ -897,8 +896,8 @@ def validate_logistic(
       y_pred = model_logistic.predict_proba(x_val)
       epoch_score = log_loss(y_val, y_pred, sample_weight = sample_weight_val)
       
-      # For first CV fold, report intermediate score of Optuna trial if applicable 
-      if (i == 0) and (trial is not None):
+      # For first CV fold, report intermediate score of Optuna trial 
+      if i == 0):
         trial.report(epoch_score, epoch)
       
         # Prune trial if necessary
@@ -916,15 +915,6 @@ def validate_logistic(
       # Append epoch score to list of epoch scores
       epoch_scores.append(epoch_score)
       
-      # Print epoch information if not Optuna trial
-      if trial is None:
-        print(
-          "\nEpoch: " + str(epoch) + 
-          "\nVal. score: " + str(epoch_score) + 
-          "\n N. epochs with no improvement: " + 
-          str(n_iter_no_change)
-          )
-      
       # Early stop training if necessary
       if n_iter_no_change >= 10:
         print("\nEarly stopping at epoch " + str(epoch) + "\n")
@@ -936,23 +926,17 @@ def validate_logistic(
     # Append best epoch number to list of best epochs
     best_epochs.append(epoch_scores.index(min(epoch_scores)) + 1)
   
-  # Return the average CV score of hyperparameters for Optuna study
-  if trial is not None:
-    return np.mean(cv_scores)
-  
-  # Return best epoch numbers of each CV fold for epoch validation 
-  # outside of Optuna study
-  else:
-    return best_epochs
+  # Return the average CV score & median best epochs
+  return np.mean(cv_scores), np.median(best_epochs)
 ```
 
 Next, we define the Optuna objective function for logistic regression. Here, we decide the search space for each hyperparameter we want to tune.
 
--   We'll tune `alpha` between a very small float value of 5e-5 and 0.5, though the optimal value is likely close to 0. Therefore, we will instruct Optuna to sample from the log domain:
+-   We'll tune `alpha` between a very small float value of 5e-5 and a relatively large value of 0.5, though the optimal value is likely close to 0. Therefore, we will instruct Optuna to sample from the log domain:
 
     -   The logarithm of the search space will be taken, values will be sampled from this space, and the exponent will be taken to return the original value. This will make lower values more likely to be suggested. We'll also do this for other hyperparameters in other models that usually take an optimal value closer to 0.
 
--   `l1_ratio` is constrained between 0 and 1, so we will use that as our search space. A value of 0 will result in pure L2 regularization, and a value of 1 will result in pure L1 regularization. Anything in between is a blend of the two.
+-   `l1_ratio` is constrained between 0 and 1, so we will use that as our search space. A value of 0 will result in pure L2 regularization, and a value of 1 will result in pure L1 regularization. Anything in between is elastic net regularization, a blend of the two.
 
 ```{python ObjLogistic}
 #| eval: false
@@ -970,12 +954,14 @@ def objective_logistic(trial):
     )
   l1_ratio = trial.suggest_float("l1_ratio", 0, 1)
   
-  # Validate the parameter set with predefined function
-  mean_cv_score = validate_logistic(
+  # Validate the parameter set
+  score, epoch = validate_logistic(
     alpha = alpha, l1_ratio = l1_ratio, trial = trial)
+    
+  # Report best n. of epochs to Optuna
+  trial.set_user_attr("n_epochs", epoch)
   
-  # Return average CV score of parameter set
-  return mean_cv_score
+  return score
 ```
 
 Now we create the Optuna study. This object will manage the tuning process and store the information from trials.
@@ -984,9 +970,9 @@ Now we create the Optuna study. This object will manage the tuning process and s
 
     -   In our case, we use the suggested default, the **Tree-structured Parzen Estimator** algorithm (see the [documentation](https://optuna.readthedocs.io/en/stable/reference/samplers/generated/optuna.samplers.TPESampler.html) for a list of papers related to TPE.). In short, the TPE algorithm fits Gaussian Mixture Models to estimate the optimal parameters for each trial.
 
--   We set a pruner algorithm: The pruner decides whether to complete a trial, or prune it based on its intermediate validation scores. This saves us a great deal of time by stopping unpromising trials early.
+-   We set a pruner algorithm: The pruner decides whether to complete a trial, or prune it based on its intermediate validation scores. This saves us a great deal of time by stopping unpromising trials quickly.
 
-    -   We use the **Hyperband** pruner algorithm, which is suggested for the TPE sampler. In short, hyperband allocates a finite budget equally to each hyperparameter configuration. There is the option to increase the total budget, at the expense of eliminating configurations more quickly (see the [documentation](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.HyperbandPruner.html) and [original paper](https://www.jmlr.org/papers/volume18/16-558/16-558.pdf) for more detail).
+    -   We use the **Hyperband** pruner algorithm, which is suggested for the TPE sampler. In short, hyperband allocates a finite budget equally to each hyperparameter configuration to be compared. There is the option to increase the total budget, at the expense of eliminating candidate configurations more quickly (see the [documentation](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.HyperbandPruner.html) and [original paper](https://www.jmlr.org/papers/volume18/16-558/16-558.pdf) for more detail).
 
 -   We name our study, and ensure we set the correct objective: Since a lower log loss value is better, we aim to minimize the reported metric.
 
@@ -1031,26 +1017,15 @@ trials_logistic.to_csv("./ModifiedData/trials_logistic.csv", index = False)
 ```{python ImportBestLogistic}
 
 # Import best trial
-best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv").iloc[0,]
+best_trial_logistic = pd.read_csv("./ModifiedData/trials_logistic.csv")
+best_trial_logistic = best_trial_logistic.loc[
+  best_trial_logistic["state"] == "COMPLETE"].iloc[0,]
 best_trial_logistic
 ```
 
 We see the best tune has a very low L1 regularization ratio, though not zero. The regularization strength is also fairly low, but not nearly close to the lower bound of our search space. This suggests we are likely close to the optimal solution.
 
-The last step is to retrieve the best number of epochs for the optimal parameter set, again using our validation function, this time without an Optuna trial. We also decrease the tolerance parameter for the early stopping.
-
-```{python ValEpochsLogistic}
-#| eval: false
-
-# Validate best number of epochs for optimal parameters, for each CV fold
-best_epochs = validate_logistic(
-  alpha = best_trial_logistic["params_reg_strength"],
-  l1_ratio = best_trial_logistic["params_l1_ratio"],
-  tol = 1e-5
-  )
-```
-
-The median best epoch for the 3 CV folds was 26, which is the number of epochs we'll use in our final logistic regression model, created below.
+The median best number of epochs for the 3 CV folds was 20, which is the number of epochs we'll use in our final logistic regression model, created below.
 
 -   We combine our preprocessing pipeline with our logistic regression model, to perform all steps in one go.
 
@@ -1070,7 +1045,7 @@ pipe_logistic = Pipeline(steps = [
       penalty = "elasticnet",
       alpha = best_trial_logistic["params_reg_strength"],
       l1_ratio = best_trial_logistic["params_l1_ratio"],
-      max_iter = 26, # Best n. of epochs found from validation
+      max_iter = 20, # Best n. of epochs found from validation
       n_iter_no_change = 1000, # Arbitrary high value to ensure training doesn't early stop based on training loss
       verbose = 1, # Print training progress
       random_state = 1923
@@ -1086,7 +1061,7 @@ Our second model, SVM, aims to classify observations by separating them with dec
 
 -   Normally, the decision boundaries are linear, but non-linear transformations can be applied to the feature space to model non-linear relationships.
 
-    -   There are numerous **kernel functions** that can be used to transform a feature space. The best choice will depend on the nature of the relationships in the data, but we will use a general-purpose **radial basis function.**
+    -   There are numerous **kernel functions** that can be used to transform a feature space. The best choice will depend on the nature of the relationships in the data, but we will use a general-purpose **radial basis function.** The model performance will greatly depend on the suitability of the chosen kernel.
 
 -   SVM can also be susceptible to multicollinearity and curse of dimensionality, so we will apply & tune regularization parameters. Regularization affects the size of the margin around the decision boundary:
 
@@ -1100,7 +1075,7 @@ In scikit-learn, a linear SVM classifier can normally be applied with [LinearSVC
 
 -   Before we apply the SGDClassifier, we'll add a **kernel approximation** step to our pipeline to transform our feature space into non-linear. [RBFSampler](https://scikit-learn.org/stable/modules/generated/sklearn.kernel_approximation.RBFSampler.html#sklearn.kernel_approximation.RBFSampler) uses random Fourier features to quickly approximate an RBF feature space ([original paper](https://people.eecs.berkeley.edu/~brecht/papers/08.rah.rec.nips.pdf)).
 
-    -   This may or may not be a good kernel choice for our data. The only way to be sure is to try different options. Here, we are using a general purpose non-linear kernel to compare a non-linear SVM with other models. Generally, it is suggested to use the "most linear decision boundaries that solve our problem", as they tend to be more robust and efficient.
+    -   This may or may not be a good kernel choice for our data. The only way to be sure is to try different options. Here, we are using a general purpose non-linear kernel to compare a non-linear SVM with other models. Generally, it is suggested to use the "most linear decision boundaries that sufficiently separate the data", as they tend to be more robust and efficient.
 
     -   RBFSampler has two parameters, `gamma` and `n_components`.
 
@@ -1129,7 +1104,7 @@ The validation function and the Optuna tuning process is pretty much the same wi
 
 
 # Define model validation function for SVM
-def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
+def validate_svm(alpha, l1_ratio, trial, tol = 1e-4, verbose = 0):
   
   # Record the CV scores of the parameter set
   cv_scores = []
@@ -1197,7 +1172,7 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
       sample_weight = sample_weight_val)
       
       # For first CV fold, report intermediate score of trial to Optuna
-      if (i == 0) and (trial is not None):
+      if i == 0:
         trial.report(epoch_score, epoch)
       
         # Prune trial if necessary
@@ -1215,15 +1190,6 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
       # Append epoch score to list of epoch scores
       epoch_scores.append(epoch_score)
       
-      # Print epoch information if not Optuna trial
-      if trial is None:
-        print(
-          "\nEpoch: " + str(epoch) + 
-          "\nVal. score: " + str(epoch_score) + 
-          "\n N. epochs with no improvement: " + 
-          str(n_iter_no_change)
-          )
-      
       # Early stop training if necessary
       if n_iter_no_change >= 10:
         print("Early stopping at epoch " + str(epoch))
@@ -1235,13 +1201,8 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
     # Append best epoch number to list of best epochs
     best_epochs.append(epoch_scores.index(min(epoch_scores)) + 1)
   
-  # Return the average CV score for Optuna study
-  if trial is not None:
-    return np.mean(cv_scores)
-  
-  # Return best epoch numbers for epoch validation
-  else:
-    return best_epochs
+  # Return the average CV score & median best n. epochs
+  return np.mean(cv_scores), np.median(best_epochs)
 ```
 
 ```{python ObjSVM}
@@ -1258,16 +1219,21 @@ def objective_svm(trial):
   l1_ratio = trial.suggest_float("l1_ratio", 0, 1)
   
   # Validate the parameter set
-  mean_cv_score = validate_svm(
+  score, epoch = validate_svm(
     alpha = alpha, l1_ratio = l1_ratio, trial = trial)
+    
+  # Report best n. of epochs to Optuna
+  trial.set_user_attr("n_epochs", epoch)
   
-  return mean_cv_score
+  return score
 ```
 
 ```{python ImportBestSVM}
 
 # Import best trial
-best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
+best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv")
+best_trial_svm = best_trial_svm.loc[
+  best_trial_svm["state"] == "COMPLETE"].iloc[0,]
 best_trial_svm
 ```
 
@@ -1297,7 +1263,7 @@ pipe_svm = Pipeline(steps = [
       penalty = "elasticnet", # Elastic net regularization instead of default L2
       alpha = best_trial_svm["params_reg_strength"],
       l1_ratio = best_trial_svm["params_l1_ratio"],
-      max_iter = 13, # Best n. of epochs found from validation 
+      max_iter = 16, # Best n. of epochs found from validation 
       n_iter_no_change = 1000, # Arbitrary high value to ensure training doesn't early stop based on training loss
       verbose = 1, # Print training progress
       random_state = 1923
@@ -1350,7 +1316,7 @@ While there are a lot of hyperparameters to tune for XGBoost, the code is simple
 # Define model validation function for XGBoost
 def validate_xgb(
   params_dict, # Dictionary of hyperparameter values
-  verbose = 0, trial = None):
+  trial, verbose = 0):
   
   # Record best epoch scores for each CV fold
   cv_scores = []
@@ -1376,8 +1342,8 @@ def validate_xgb(
     x_tr = pipe_process.fit_transform(x_tr, y_tr)
     x_val = pipe_process.transform(x_val)
     
-    # Create pruning callback for first CV split if this is an Optuna trial
-    if (i == 0) and (trial is not None): 
+    # Create pruning callback for first CV split
+    if i == 0: 
       callback_pruner = [optuna.integration.XGBoostPruningCallback(
         trial, "validation_0-logloss")]
     
@@ -1420,13 +1386,8 @@ def validate_xgb(
     # Append best epoch number to list of best epochs
     best_epochs.append(model_xgb.best_iteration + 1)
   
-  # Return the average CV score for Optuna study
-  if trial is not None:
-    return np.mean(cv_scores)
-  
-  # Return best epoch numbers for epoch validation
-  else:
-    return best_epochs 
+   # Return the average CV score & median best n. rounds
+  return np.mean(cv_scores), np.median(best_epochs)
 ```
 
 Let's discuss the numerous parameters of XGBoost we will tune, and the search spaces.
@@ -1451,7 +1412,6 @@ Let's discuss the numerous parameters of XGBoost we will tune, and the search sp
 
 ```{python ObjXGB}
 #| eval: false
-
 
 # Define objective function for hyperparameter tuning
 def objective_xgb(trial):
@@ -1479,20 +1439,25 @@ def objective_xgb(trial):
   }
   
   # Validate parameter set
-  mean_cv_score = validate_xgb(
+  score, rounds = validate_xgb(
     params_dict = params_dict, trial = trial)
+    
+  # Report best n. rounds to Optuna
+  trial.set_user_attr("n_rounds", rounds)
   
-  return mean_cv_score
+  return score
 ```
 
 ```{python ImportBestXGB}
 
 # Import best trial
-best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
-best_trial_xgb
+best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv")
+best_trial_xgb  = best_trial_xgb.loc[
+  best_trial_xgb["state"] == "COMPLETE"].iloc[0,]
+best_trial_xgb 
 ```
 
-The optimal set of hyperparameters yields trees on the shallow side, with some regularization. Most interesting is the `colsample_bytree` parameter: A value of roughly 0.42 means each tree is built with a subsample of 42% of the features in our data, amounting to roughly 37-38 features. More evidence that we may have many redundant (or simply useless) features in our dataset.
+The optimal set of hyperparameters yields trees on the shallow side, with some regularization. Most interesting is the `colsample_bytree` parameter: A value of roughly 0.4 means each tree is built with a subsample of 40% of the features in our data. More evidence that we may have many redundant (or simply useless) features in our dataset.
 
 ```{python FinalModelXGB}
 
@@ -1501,7 +1466,7 @@ pipe_xgb = Pipeline(steps = [
   ("preprocessing", pipe_process), # Preprocessing steps
   ("XGBoost", XGBClassifier( # Model step
       objective = "binary:logistic",
-      n_estimators = 20, # Best number of rounds from validation
+      n_estimators = 22, # Best number of rounds from validation
       eval_metric = "logloss",
       tree_method = "gpu_hist",
       gpu_id = 0,
@@ -1756,7 +1721,7 @@ The model architecture above consists of at least one hidden layer, and it is po
 
 -   The **output size** of the first hidden layer will equal the input & output sizes of any subsequent hidden layer(s). We will tune this as the `hidden_size` hyperparameter.
 
-    -   It's also possible to set a different hyperparameter for the output size of each subsequent hidden layer and tune them separately, so the layers constantly get smaller as we move forward in the network.
+    -   It's also possible to set a different hyperparameter for the output size of each subsequent hidden layer and tune them separately, so the layers constantly get smaller as we move forward in the network, performing a reduction in the feature space (this is a key part of autoencoder architectures).
 
     -   The output size of a hidden layer also equals the number of neurons / units in that layer, as 1 neuron = 1 output. Generally, we want hidden layer sizes to be between the network input size (number of features) and the final output size (one in this case).
 
@@ -1794,9 +1759,9 @@ Previously, we used the same loss function both to train our models, and to scor
 
 -   In general, we want to train & tune models with a loss function that scores the probability predictions directly, instead of the class predictions (more on this in model testing).
 
--   However, when we tune the parameters of focal loss, our loss function becomes part of the optimization problem (just like the class weights we applied to the loss function for the previous models). If we use focal loss also as our validation metric, this will be a form of leakage: We'll simply search for the focal loss parameters that minimize focal loss by changing the metric itself (moving the goalposts in a sense), not necessarily those that maximize model performance.
+-   However, when we tune the parameters of focal loss, our loss function becomes part of the optimization problem (just like the class weights we applied to the loss function for the previous models). If we use focal loss also as our validation metric, this will be a form of leakage: We'll simply search for the focal loss parameters that minimize focal loss by changing the metric itself, not necessarily those that maximize model performance (moving the goalposts in a sense).
 
--   Therefore, for validating our NN hyperparameters' performance, we will use the **average precision** performance metric (which will be explained in model testing). Keep in mind this value is to be **maximized**, and not minimized like a loss function.
+-   Therefore, to validate our NN hyperparameters' performance, we will use the **average precision** performance metric (which will be explained in model testing). Keep in mind this value is to be **maximized**, and not minimized like a loss function.
 
 Finally, we choose an **optimizer** and an optional **learning rate scheduler.**
 
@@ -1845,9 +1810,7 @@ Now, we define our validation function for the neural network model. There are a
 
     -   The `num_workers` argument controls the number of parallel processes used by the dataloader. I've often had issues with this parameter, so I did not use parallelization.
 
--   We create an early stopping callback, a pruning callback for Optuna trials, and a checkpointing callback that saves the best and last epoch of each trained model to the project directory.
-
-    -   The checkpointing is disabled for Optuna trials. We'll use it for epoch validation, as the checkpoint callback stores the path to the best epoch saved, and the filename includes the epoch number. This can also be viewed directly from the checkpoint file in the `lightning_logs` folder.
+    -   We create an early stopping callback and an Optuna pruning callback.
 
 -   Finally, we create the `Trainer`. The trainer takes the model, dataloaders, callbacks and additional settings, and performs training, testing and prediction.
 
@@ -1862,7 +1825,7 @@ Now, we define our validation function for the neural network model. There are a
 
 
 # Define validation function for NN
-def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
+def validate_nn(hyperparams_dict, trial, tol = 1e-4):
   
   # Store the CV scores for the parameter set
   cv_scores = []
@@ -1895,7 +1858,7 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
       )
       
     val_loader = torch.utils.data.DataLoader(
-      val_data, batch_size = 1024, num_workers = 0, 
+      val_data, batch_size = len(x_val), num_workers = 0, 
       shuffle = False # Don't shuffle val. data before creating val. batches
       )
       
@@ -1911,19 +1874,10 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
       )
     callbacks.append(callback_earlystop)
     
-    # Create Optuna pruner callback only for first CV fold if an Optuna trial
-    if (i == 0) and (trial is not None):
+    # Create Optuna pruner callback only for first CV fold
+    if i == 0:
       callback_pruner = OptunaPruning(trial, monitor = "val_avg_precision")
       callbacks.append(callback_pruner)
-    
-    # Create checkpoint callback if not an Optuna trial
-    if trial is None:
-      callback_checkpoint = pl.callbacks.ModelCheckpoint(
-        monitor = "val_avg_precision", 
-        save_last = True, # Save last epoch as a checkpoint
-        save_top_k = 1, # Save best epoch as a checkpoint
-        mode = "max", filename = "{epoch}-{val_avg_precision:.4f}")
-      callbacks.append(callback_checkpoint)
     
     # Create Lightning Trainer
     trainer = pl.Trainer(
@@ -1933,32 +1887,27 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
       callbacks = callbacks,
       logger = True,
       enable_model_summary = False, # Disable printing model summary
-      enable_progress_bar = (trial is None), # Disable prog. bar for Optuna trials
-      enable_checkpointing = (trial is None) # Disable checkpoints for Optuna trials
+      enable_progress_bar = False, # Disable prog. bar for Optuna trials
+      enable_checkpointing = False # Disable checkpoints for Optuna trials
     )
   
     # Create & train model
     model = SeluDropoutModel(hyperparams_dict = hyperparams_dict)
     trainer.fit(model, train_loader, val_loader)
     
-    # Append best epoch's validation score to CV scores list
-    cv_scores.append(trainer.callback_metrics["val_avg_precision"].item())
+    # Retrieve best val score and n. of epochs
+    score = callbacks[0].best_score.cpu().numpy()
+    epoch = trainer.current_epoch - callbacks[0].wait_count # Starts from 1
+    cv_scores.append(score)
+    best_epochs.append(epoch)
     
-    # If not Optuna trial, append best model checkpoint path to best epochs list
-    if trial is None:
-      best_epochs.append(trainer.checkpoint_callback.best_model_path)
-  
-  # Return the mean CV score for Optuna trial, list of best epochs otherwise
-  if trial is not None:
-    return np.mean(cv_scores)
-  
-  else:
-    return best_epochs
+  # Return the mean CV score, median best epoch
+  return np.mean(cv_scores), np.median(best_epochs)
 ```
 
 Our tuning objective function is similar to the one for XGBoost.
 
--   We'll try networks with 1 to 5 hidden layers. I'd expect 1 or 2 hidden layers to be enough for this problem, but in previous iterations, 3-4 hidden layers performed close to optimal as well.
+-   We'll try networks with 1 to 3 hidden layers. I'd expect 1 or 2 hidden layers to be enough for this problem, but in previous iterations, 3-4 hidden layers performed close to optimal as well.
 
 -   We won't sample a hidden size value directly, but we'll sample an exponent for the base of 2, yielding a hidden size in powers of 2, from 2 to 64. All hidden layers will have the same size.
 
@@ -1974,7 +1923,7 @@ Our tuning objective function is similar to the one for XGBoost.
 def objective_nn(trial):
   
   # Define parameter ranges to tune over & suggest param set for trial
-  n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 5)
+  n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 3)
   hidden_size = 2 ** trial.suggest_int("hidden_size", 1, 6) # Tune hidden size as
                                                             # exponent of 2
   learning_rate = trial.suggest_float("learning_rate", 5e-4, 5e-2)
@@ -1996,9 +1945,12 @@ def objective_nn(trial):
     }
     
   # Validate hyperparameter set
-  mean_cv_score = validate_nn(hyperparams_dict = hyperparams_dict, trial = trial)
+  score, epoch = validate_nn(hyperparams_dict = hyperparams_dict, trial = trial)
   
-  return mean_cv_score
+  # Report best n. of epochs
+  trial.set_user_attr("n_epochs", epoch)
+  
+  return score
 ```
 
 ```{python StudyNN}
@@ -2016,11 +1968,13 @@ study_nn = optuna.create_study(
 ```{python ImportBestNN}
 
 # Import best trial
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn.csv").iloc[0,]
+best_trial_nn = pd.read_csv("./ModifiedData/trials_nn.csv")
+best_trial_nn = best_trial_nn.loc[
+  best_trial_nn["state"] == "COMPLETE"].iloc[0,]
 best_trial_nn
 ```
 
-The best tune has 2 hidden layers, each with a size of 16 ($2^4$).
+The best tune has 3 hidden layers, each with a size of 8 ($2^3$).
 
 -   This could mean our feature space is fairly non-linear, but also on the smaller side, as the hidden layer size is much smaller compared to the number of input features.
 
@@ -2030,11 +1984,11 @@ The best tune has 2 hidden layers, each with a size of 16 ($2^4$).
 
 -   The base learning rate is considerably higher compared to the default of 0.001.
 
--   An `alpha` of roughly 0.2 means our focal loss function puts a bit more weight on the positive cases, and a `gamma` higher than 2 means "easy" training examples are considerably discounted from the loss calculation.
+-   An `alpha` of roughly 0.49 means our focal loss function puts considerably more weight on the positive cases, and a low `gamma` of roughly 0.14 means "easy" training examples are slightly discounted from the loss calculation.
 
-    -   A heuristic suggested by the authors of the [original paper](https://arxiv.org/abs/1708.02002) was `alpha = 0.25` and `gamma = 2`. Our tune is not far from that.
+    -   A heuristic suggested by the authors of the [original paper](https://arxiv.org/abs/1708.02002) was `alpha = 0.25` and `gamma = 2`. Our tune is considerably far from that, but previous iterations with a similar value for alpha and gamma also performed very similarly.
 
-The median best number of epochs for this parameter set was 9, which will be set later, in the `Trainer` for our final model. For now, we only create our final model instance with the best hyperparameters.
+The median best number of epochs for this parameter set was 17, which will be set later, in the `Trainer` for our final model. For now, we only create our final model instance with the best hyperparameters.
 
 ```{python FinalModelNN}
 
@@ -2124,7 +2078,7 @@ for key in models_dict.keys():
       
     # Create Lightning Trainer
     trainer = pl.Trainer(
-      max_epochs = 9, # Best n. of epochs from validation
+      max_epochs = 17, # Best n. of epochs from validation
       log_every_n_steps = 5, # The default is 50, but there are less training steps (batches) than 50
       accelerator = "gpu", devices = "auto", precision = "16-mixed", # GPU training
       logger = True,
@@ -2289,9 +2243,9 @@ df_scores = pd.DataFrame(
 print(df_scores)
 ```
 
-All models are a huge improvement over the baseline classifier. XGBoost seems to perform the best overall, in almost all summary metrics.
+All models are a large improvement over the baseline classifier. XGBoost seems to perform the best overall, in almost all summary metrics.
 
--   The NN model follows XGBoost in average precision, and has the highest recall at the "optimal" threshold, but also the worst Brier scores.
+-   The NN model follows XGBoost in average precision, and has the second highest F1 score at the "optimal" threshold, but also the worst Brier score.
 
     -   We calculated Brier scores by fully balancing the contributions of each class with class weights. All models except the NN were trained in the same fashion, but the NN was trained with less weight on the positive class.
 
@@ -2299,7 +2253,7 @@ All models are a huge improvement over the baseline classifier. XGBoost seems to
 
     -   We also see the "optimal" threshold is much lower for the NN model than for the class weighted models. We'll talk about this in more detail with the predicted probabilities plot.
 
--   The logistic regression model comes next in average precision, and beats the NN model in Brier, F1 and "optimal" precision scores. It's likely a very efficient alternative to the XGBoost and NN models.
+-   The logistic regression model comes next overall, and beats all others in recall at the optimal threshold probability. It's likely a very efficient alternative to the XGBoost and NN models.
 
 -   The SVM model performs considerably worse than the other models, and this could have several reasons. The kernel approximation we performed may not be well suited to this feature set. The approximated probability predictions may not be very reliable. Still, it's likely an effective model on its own.
 
@@ -2327,7 +2281,7 @@ In the plot above, each curve starts with a threshold probability of 1, and ends
 
 -   Calculating the **area under the precision-recall curve (PRAUC)** summarizes this tradeoff, and the overall model performance at all thresholds. This is equivalent to the **average precision** metric we previously calculated.
 
--   We see the XGBoost model has the best PRC curve at pretty much any threshold probability. The NN model outperforms the logistic model at lower thresholds, and the logistic model outperforms the NN model at higher thresholds.
+-   We see the XGBoost model has the best PRC curve at pretty much any threshold probability. The NN model outperforms the logistic model at lower thresholds, and the logistic model outperforms the NN model at some higher threshold values.
 
 ### F1 score - precision - recall plots
 
@@ -2440,7 +2394,7 @@ We see a major difference between the class weighted models, and the NN model tr
 
 -   The class weighted models reach their maximum F1 score around a threshold probability of 0.6 - 0.65. Recall declines and precision increases mainly after 0.3.
 
--   In contrast, the NN model reaches its maximum F1 score around a threshold probability of 0.18 - 0.19. Recall sharply declines and precision sharply increases after around 0.12 - 0.13.
+-   In contrast, the NN model reaches its maximum F1 score around a threshold probability of 0.22. Recall sharply declines and precision sharply increases after around 0.1.
 
 -   This suggests the class weighted models ascribe much higher positive class probabilities to predictions compared to the NN model. We'll see this clearly in the next plot.
 
@@ -2559,9 +2513,9 @@ In the plot above, we have a stacked histogram of predicted positive class proba
 
 -   The probability predictions of the NN model are distributed quite differently. The vast majority of cases have very low positive class probabilities, mostly below 0.2.
 
-    -   The probabilities for the negative cases are roughly close to normally distributed, around maybe 0.16 - 0.17.
+    -   The probabilities for the negative cases are right skewed, with a median around maybe 0.1.
 
-    -   Almost the same distribution shape applies to the positive cases, but with a very long right tail. There are "outlier" positive cases with predicted probabilities much higher than 0.2. These are likely the most extreme positive cases.
+    -   A fairly uniform distribution applies to the positive cases, but with a considerable number of observations at the right tail. There are "outlier" positive cases with predicted probabilities much higher than 0.8. These are likely the most extreme and easily identified positive cases.
 
     -   This explains why the "optimal" threshold probability is much lower: The NN model, trained with focal loss, puts less weight on the positive cases, and predicts lower positive probabilities across the board, compared to the class weighted models' predictions.
 
@@ -2573,7 +2527,7 @@ In the plot above, we have a stacked histogram of predicted positive class proba
 
     -   In contrast, the probabilities predicted by the focal loss NN model could be considered more realistic, as they are low for the vast majority of cases, and relatively much higher for a small number of cases.
 
-        -   Intuitively, we'd expect most cars to have a smaller risk of being kicks, with a few high-risk ones. The NN model also seems to "separate" the riskiest cars from the rest to a higher degree.
+        -   Intuitively, we'd expect most cars to have a smaller risk of being kicks, with a few high-risk ones. The NN model's probability predictions also seems to "separate" the riskiest cars from the rest to a higher degree.
 
 ## Sensitivity analysis
 
@@ -2823,17 +2777,18 @@ plt.close("all")
 
 We see very similar, smooth curves for the class weighted models.
 
--   The highest profits are reached at around 0.5 threshold probability, with 9.5k-10k cars purchased out of more than 14k.
+-   The highest profits are reached at around 0.45 threshold probability, with 9.k-10k cars purchased out of more than 14k.
 
 -   The profits increase steadily as we increase the threshold to this point, and decline steadily afterwards.
 
 In contrast, the curves for the NN model, trained with focal loss, are much more different.
 
--   Profits sharply rise to their highest values around 0.17 threshold probability, also with 9.5k-10k cars purchased. They also decline sharply afterwards.
+-   Profits sharply rise to their highest values around 0.15 threshold probability, also with 9k-10k cars purchased. They decline afterwards, plateau for a bit, and decline again.
+    -   I believe the shape of the NN model's profit / threshold prob. curve suggests the NN model tells apart the best and worst cars more easily compared to the class weighted models.
 
 The most profitable model overall is XGBoost, though the NN and logistic regression come close. SVM trails behind considerably.
 
--   The NN and logistic models reach a slightly higher profit value at some sub-optimal numbers of cars purchased. So they could still be preferred to XGBoost in some cases, when our number of purchases are limited.
+-   The NN and logistic models may reach a slightly higher profit value at some sub-optimal numbers of cars purchased. So they could still be preferred to XGBoost in some cases, if our number of purchases were to be limited.
 
 Below, we view the quasi-optimal solutions for each model as a table.
 
@@ -2872,7 +2827,7 @@ print(df_optimal)
 
 ## Conclusions
 
-We tested several classifiers, from simple logistic regression to a neural network model. We went over a typical hyperparameter tuning & performance evaluation workflow, with classification metrics suited to the problem at hand. We saw that XGBoost performed better than a NN model, and logistic regression held up very well compared to its efficiency and simplicity. SVM trailed behind, but also performed decently for a highly imbalanced problem, and we didn't pay much attention to the kernel choice. Training & tuning the logistic & SVM models with stochastic gradient descent saved a lot of time on a large dataset.
+We tested several classifiers, from simple logistic regression to a neural network model. We went over a typical hyperparameter tuning & performance evaluation workflow, with classification metrics suited to the problem at hand. We saw that XGBoost performed a bit better than a NN model overall, and logistic regression held up very well compared to its efficiency and simplicity. SVM trailed behind, but also performed decently for a highly imbalanced problem, and we didn't pay much attention to the kernel choice. Training & tuning the logistic & SVM models with stochastic gradient descent saved a lot of time on a large dataset.
 
 We applied class weights to the training loss functions to try and handle the class imbalance. We also tried focal loss, which was specifically designed for heavily imbalanced problems. It's hard to say which approach is "better", as we tried them across different algorithms. It's clear they result in very different probability predictions, so that should be taken into consideration for real-life applications. It would be interesting to implement focal loss as a custom scikit-learn metric, and repeat this experiment by training the other models with focal loss.
 

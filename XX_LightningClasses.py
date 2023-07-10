@@ -6,6 +6,7 @@
 
 import torch, torchvision, torchmetrics
 import lightning.pytorch as pl
+# import pytorch_lightning as pl
 
 # Careful: Optuna still uses "pytorch_lightning" to import the Pruning integration
 # with Ligtning, but Lightning itself is now imported as lightning.pytorch

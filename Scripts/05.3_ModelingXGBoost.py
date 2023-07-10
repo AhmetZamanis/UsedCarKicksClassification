@@ -23,7 +23,7 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
 # Define model validation function
-def validate_xgb(params_dict, verbose = 0, trial = None):
+def validate_xgb(params_dict, trial, verbose = 0):
   
   # Record best epoch scores for each CV fold
   cv_scores = []
@@ -49,8 +49,8 @@ def validate_xgb(params_dict, verbose = 0, trial = None):
     x_tr = pipe_process.fit_transform(x_tr, y_tr)
     x_val = pipe_process.transform(x_val)
     
-    # Create pruning callback for first CV split if this is an Optuna trial
-    if (i == 0) and (trial is not None): 
+    # Create pruning callback for first CV split
+    if i == 0: 
       callback_pruner = [optuna.integration.XGBoostPruningCallback(
         trial, "validation_0-logloss")]
     
@@ -93,15 +93,10 @@ def validate_xgb(params_dict, verbose = 0, trial = None):
     # Append best epoch number to list of best epochs
     best_epochs.append(model_xgb.best_iteration + 1)
   
-  # Return the average CV score for Optuna study
-  if trial is not None:
-    return np.mean(cv_scores)
+  # Return the average CV score & median best n. rounds
+  return np.mean(cv_scores), np.median(best_epochs)
   
-  # Return best epoch numbers for epoch validation
-  else:
-    return best_epochs 
-
-
+ 
 # Define objective function for hyperparameter tuning
 def objective_xgb(trial):
   
@@ -128,10 +123,13 @@ def objective_xgb(trial):
   }
   
   # Validate parameter set
-  mean_cv_score = validate_xgb(
+  score, rounds = validate_xgb(
     params_dict = params_dict, trial = trial)
+    
+  # Report best n. rounds to Optuna
+  trial.set_user_attr("n_rounds", rounds)
   
-  return mean_cv_score
+  return score
 
 
 # Create study
@@ -146,34 +144,10 @@ study_xgb = optuna.create_study(
 # Optimize study
 study_xgb.optimize(
   objective_xgb, 
-  n_trials = 1000,
+  n_trials = 500,
   show_progress_bar = True)
 
 
 # Retrieve and export trials
 trials_xgb = study_xgb.trials_dataframe().sort_values("value", ascending = True)
 trials_xgb.to_csv("./ModifiedData/trials_xgb.csv", index = False)
-
-
-# Import best trial
-best_trial_xgb = pd.read_csv("./ModifiedData/trials_xgb.csv").iloc[0,]
-
-
-# Retrieve best number of rounds for optimal parameters, for each CV fold
-params_dict = {
-  "learning_rate": best_trial_xgb["params_learning_rate"],
-    "max_depth": best_trial_xgb["params_max_depth"],
-    "min_child_weight": best_trial_xgb["params_min_child_weight"],
-    "gamma": best_trial_xgb["params_gamma"],
-    "reg_alpha": best_trial_xgb["params_l1_reg"],
-    "reg_lambda": best_trial_xgb["params_l2_reg"],
-    "subsample": best_trial_xgb["params_subsample"],
-    "colsample_bytree": best_trial_xgb["params_colsample_bytree"]
-}
-best_epochs = validate_xgb(params_dict = params_dict, verbose = 1)
-
-
-# Retrieve best n. of epochs: 20
-best_epochs
-int(np.median(best_epochs))
-int(np.median(best_epochs))

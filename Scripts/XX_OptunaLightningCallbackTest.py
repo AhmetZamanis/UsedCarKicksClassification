@@ -11,7 +11,7 @@ exec(open("./Scripts/04_Preprocessing.py").read())
 import optuna
 from optuna.integration.pytorch_lightning import PyTorchLightningPruningCallback
 import torch, torchvision, torchmetrics
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 from sklearn.utils.class_weight import compute_class_weight
 from XX_LightningClasses import TrainDataset, SeluDropoutModel, OptunaPruning
 import warnings

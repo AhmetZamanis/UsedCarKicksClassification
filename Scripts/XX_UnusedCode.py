@@ -1,4 +1,94 @@
 
+# LIGHTNING VALIDATION UNIT TEST
+# Create hyperparameters dict
+hyperparams_dict = {
+      "input_size": 90,
+      "n_hidden_layers": 2,
+      "hidden_size": 16,
+      "learning_rate": 0.5,
+      "l2": 0.1,
+      "dropout": 0.1,
+      "loss_alpha": 0.25,
+      "loss_gamma": 2
+    }
+
+
+# Store the CV scores for the parameter set
+cv_scores = []
+  
+# Store the best n. of epochs
+best_epochs = []
+  
+for i, (train_index, val_index) in enumerate(cv_indices):
+    
+  # Split training-validation data
+  x_tr = x_train.iloc[train_index, ]
+  y_tr = y_train.iloc[train_index, ]
+  x_val = x_train.iloc[val_index, ]
+  y_val = y_train.iloc[val_index, ]
+    
+  # Perform preprocessing
+  x_tr = pipe_process.fit_transform(x_tr, y_tr)
+  x_val = pipe_process.transform(x_val)
+
+  # Load data into TrainDataset
+  train_data = TrainDataset(x_tr, y_tr)
+  val_data = TrainDataset(x_val, y_val)
+
+  # Create data loaders
+  train_loader = torch.utils.data.DataLoader(
+      train_data, batch_size = 1024, num_workers = 0, shuffle = True)
+  val_loader = torch.utils.data.DataLoader(
+      val_data, batch_size = len(x_val), num_workers = 0, shuffle = False)
+      
+  # Create callbacks list
+  callbacks = []
+    
+  # Create early stop callback
+  callback_earlystop = pl.callbacks.EarlyStopping(
+      monitor = "val_avg_precision", mode = "max",
+      min_delta = 1e-4,
+      patience = 10)
+  callbacks.append(callback_earlystop)
+    
+  
+    
+  # Create trainer
+  trainer = pl.Trainer(
+      max_epochs = 500,
+      log_every_n_steps = 5, # The default is 50, but there are less training batches
+      # than 50
+      accelerator = "gpu", devices = "auto", precision = "16-mixed", 
+      callbacks = callbacks,
+      enable_model_summary = False, 
+      logger = True,
+      enable_progress_bar = False, # Disable prog. bar, checkpoints for Optuna trials
+      enable_checkpointing = False
+    )
+  
+  # Create & train model
+  model = SeluDropoutModel(hyperparams_dict = hyperparams_dict)
+  trainer.fit(model, train_loader, val_loader)
+    
+  # Retrieve best val score and n. of epochs
+  score = callbacks[0].best_score.cpu().numpy()
+  epoch = trainer.current_epoch - callbacks[0].wait_count # Starts from 1
+  cv_scores.append(score)
+  best_epochs.append(epoch)
+    
+np.mean(cv_scores) 
+np.median(best_epochs)
+cv_scores
+
+callbacks[0].best_score
+callback_earlystop.best_score
+trainer.current_epoch
+callbacks[0].wait_count
+callback_earlystop.wait_count
+callback_earlystop.state_dict()
+
+
+
 
 import time
 # Test time of 1 calculation

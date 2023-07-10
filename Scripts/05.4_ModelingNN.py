@@ -34,12 +34,12 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
 # Define validation function
-def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
+def validate_nn(hyperparams_dict, trial, tol = 1e-4):
   
   # Store the CV scores for the parameter set
   cv_scores = []
   
-  # Store the best checkpoint strings
+  # Store the best n. of epochs
   best_epochs = []
   
   for i, (train_index, val_index) in enumerate(cv_indices):
@@ -62,7 +62,7 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
     train_loader = torch.utils.data.DataLoader(
       train_data, batch_size = 1024, num_workers = 0, shuffle = True)
     val_loader = torch.utils.data.DataLoader(
-      val_data, batch_size = 1024, num_workers = 0, shuffle = False)
+      val_data, batch_size = len(x_val), num_workers = 0, shuffle = False)
       
     # Create callbacks list
     callbacks = []
@@ -74,17 +74,10 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
       patience = 10)
     callbacks.append(callback_earlystop)
     
-    # Create Optuna pruner callback only for first CV fold if an Optuna trial
-    if (i == 0) and (trial is not None):
+    # Create Optuna pruner callback only for first CV fold
+    if i == 0:
       callback_pruner = OptunaPruning(trial, monitor = "val_avg_precision")
       callbacks.append(callback_pruner)
-    
-    # Create checkpoint callback if not an Optuna trial
-    if trial is None:
-      callback_checkpoint = pl.callbacks.ModelCheckpoint(
-        monitor = "val_avg_precision", save_last = True, save_top_k = 1, 
-        mode = "max", filename = "{epoch}-{val_avg_precision:.4f}")
-      callbacks.append(callback_checkpoint)
     
     # Create trainer
     trainer = pl.Trainer(
@@ -95,38 +88,33 @@ def validate_nn(hyperparams_dict, tol = 1e-4, trial = None):
       callbacks = callbacks,
       enable_model_summary = False, 
       logger = True,
-      enable_progress_bar = (trial is None), # Disable prog. bar, checkpoints for Optuna trials
-      enable_checkpointing = (trial is None)
+      enable_progress_bar = False, # Disable prog. bar, checkpoints for Optuna trials
+      enable_checkpointing = False
     )
   
     # Create & train model
     model = SeluDropoutModel(hyperparams_dict = hyperparams_dict)
     trainer.fit(model, train_loader, val_loader)
     
-    # Append best epoch's validation average precision to CV scores list
-    cv_scores.append(trainer.callback_metrics["val_avg_precision"].item())
+    # Retrieve best val score and n. of epochs
+    score = callbacks[0].best_score.cpu().numpy()
+    epoch = trainer.current_epoch - callbacks[0].wait_count # Starts from 1
+    cv_scores.append(score)
+    best_epochs.append(epoch)
     
-    # If not Optuna trial, append best model checkpoint path to best epochs list
-    if trial is None:
-      best_epochs.append(trainer.checkpoint_callback.best_model_path)
+  # Return the mean CV score, median best epoch
+  return np.mean(cv_scores), np.median(best_epochs)
   
-  # Return the mean CV score for Optuna trial, list of best epochs otherwise
-  if trial is not None:
-    return np.mean(cv_scores)
-  
-  else:
-    return best_epochs
-  
-  
+
 # Define Optuna objective
 def objective_nn(trial):
   
   # Define parameter ranges to tune over & suggest param set for trial
-  n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 5)
+  n_hidden_layers = trial.suggest_int("n_hidden_layers", 1, 3)
   hidden_size = 2 ** trial.suggest_int("hidden_size", 1, 6)
   learning_rate = trial.suggest_float("learning_rate", 5e-4, 5e-2)
-  l2 = trial.suggest_float("l2", 5e-5, 1e-2, log = True)
-  dropout = trial.suggest_float("dropout", 1e-3, 0.25, log = True)
+  l2 = trial.suggest_float("l2", 0, 1e-2)
+  dropout = trial.suggest_float("dropout", 1e-3, 0.25)
   loss_alpha = trial.suggest_float("loss_alpha", 0, 1)
   loss_gamma = trial.suggest_float("loss_gamma", 0, 4)
   
@@ -143,9 +131,12 @@ def objective_nn(trial):
     }
     
   # Validate hyperparameter set
-  mean_cv_score = validate_nn(hyperparams_dict = hyperparams_dict, trial = trial)
+  score, epoch = validate_nn(hyperparams_dict = hyperparams_dict, trial = trial)
   
-  return mean_cv_score
+  # Report best n. of epochs
+  trial.set_user_attr("n_epochs", epoch)
+  
+  return score
   
 
 # Create study
@@ -168,26 +159,3 @@ study_nn.optimize(
 trials_nn = study_nn.trials_dataframe().sort_values("value", ascending = False)
 trials_nn.to_csv("./ModifiedData/trials_nn.csv", index = False)
 
-
-# Import best trial
-best_trial_nn = pd.read_csv("./ModifiedData/trials_nn.csv").iloc[0,]
-
-
-# Retrieve best number of rounds for optimal parameters, for each CV fold
-hyperparams_dict = {
-      "input_size": 90,
-      "n_hidden_layers": best_trial_nn["params_n_hidden_layers"],
-      "hidden_size": 2 ** best_trial_nn["params_hidden_size"],
-      "learning_rate": best_trial_nn["params_learning_rate"],
-      "l2": best_trial_nn["params_l2"],
-      "dropout": best_trial_nn["params_dropout"],
-      "loss_alpha": best_trial_nn["params_loss_alpha"],
-      "loss_gamma": best_trial_nn["params_loss_gamma"]
-    }
-best_epochs = validate_nn(hyperparams_dict = hyperparams_dict, tol = 1e-5)
-
-
-# Best epochs: 20, 9, 9
-best_epochs
-np.mean([20,9,9])
-np.median([20,9,9])

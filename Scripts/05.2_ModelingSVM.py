@@ -24,7 +24,7 @@ cv_indices = list(cv_kfold.split(x_train, y_train))
 
 
 # Define model validation function
-def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
+def validate_svm(alpha, l1_ratio, trial, tol = 1e-4, verbose = 0):
   
   # Record the CV scores of the parameter set
   cv_scores = []
@@ -90,7 +90,7 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
       epoch_score = hinge_loss(y_val, pred_decision, sample_weight = sample_weight_val)
       
       # For first CV fold, report intermediate score of trial to Optuna
-      if (i == 0) and (trial is not None):
+      if i == 0:
         trial.report(epoch_score, epoch)
       
         # Prune trial if necessary
@@ -108,15 +108,6 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
       # Append epoch score to list of epoch scores
       epoch_scores.append(epoch_score)
       
-      # Print epoch information if not Optuna trial
-      if trial is None:
-        print(
-          "\nEpoch: " + str(epoch) + 
-          "\nVal. score: " + str(epoch_score) + 
-          "\n N. epochs with no improvement: " + 
-          str(n_iter_no_change)
-          )
-      
       # Early stop training if necessary
       if n_iter_no_change >= 10:
         print("Early stopping at epoch " + str(epoch))
@@ -128,15 +119,10 @@ def validate_svm(alpha, l1_ratio, tol = 1e-4, verbose = 0, trial = None):
     # Append best epoch number to list of best epochs
     best_epochs.append(epoch_scores.index(min(epoch_scores)) + 1)
   
-  # Return the average CV score for Optuna study
-  if trial is not None:
-    return np.mean(cv_scores)
+  # Return the average CV score & median best n. epochs
+  return np.mean(cv_scores), np.median(best_epochs)
   
-  # Return best epoch numbers for epoch validation
-  else:
-    return best_epochs
   
-
 # Define objective function for hyperparameter tuning
 def objective_svm(trial):
   
@@ -145,10 +131,13 @@ def objective_svm(trial):
   l1_ratio = trial.suggest_float("l1_ratio", 0, 1)
   
   # Validate the parameter set
-  mean_cv_score = validate_svm(
+  score, epoch = validate_svm(
     alpha = alpha, l1_ratio = l1_ratio, trial = trial)
+    
+  # Report best n. of epochs to Optuna
+  trial.set_user_attr("n_epochs", epoch)
   
-  return mean_cv_score
+  return score
 
 
 # Create study
@@ -170,22 +159,4 @@ study_svm.optimize(
 # Retrieve and export trials
 trials_svm = study_svm.trials_dataframe().sort_values("value", ascending = True)
 trials_svm.to_csv("./ModifiedData/trials_svm.csv", index = False)
-
-
-# Import best trial
-best_trial_svm = pd.read_csv("./ModifiedData/trials_svm.csv").iloc[0,]
-
-
-# Retrieve best number of rounds with optimal parameters for each CV fold
-best_epochs = validate_svm(
-  alpha = best_trial_svm["params_reg_strength"],
-  l1_ratio = best_trial_svm["params_l1_ratio"],
-  tol = 1e-5
-  )
-
-
-# Retrieve best n. of epochs: 13
-best_epochs
-int(np.median(best_epochs))
-int(np.mean(best_epochs))
 
